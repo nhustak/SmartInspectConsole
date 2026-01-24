@@ -18,13 +18,11 @@ public class MainViewModel : ViewModelBase, IDisposable
     private readonly SmartInspectTcpListener _tcpListener;
     private readonly SmartInspectPipeListener _pipeListener;
     private readonly object _logEntriesLock = new();
-    private readonly Dictionary<string, SessionViewModel> _sessionMap = new(StringComparer.OrdinalIgnoreCase);
 
-    private LogEntry? _selectedLogEntry;
-    private string _filterText = string.Empty;
-    private SessionViewModel? _selectedSession;
     private string _statusText = "Ready";
     private bool _isListening;
+    private LogViewViewModel? _selectedView;
+    private int _viewCounter = 1;
 
     public MainViewModel()
     {
@@ -46,20 +44,18 @@ public class MainViewModel : ViewModelBase, IDisposable
         LogEntries = new ObservableCollection<LogEntry>();
         Watches = new ObservableCollection<Watch>();
         ProcessFlows = new ObservableCollection<ProcessFlow>();
-        Sessions = new ObservableCollection<SessionViewModel> { SessionViewModel.All };
+        Views = new ObservableCollection<LogViewViewModel>();
 
         // Enable collection synchronization for cross-thread access
         BindingOperations.EnableCollectionSynchronization(LogEntries, _logEntriesLock);
         BindingOperations.EnableCollectionSynchronization(Watches, _logEntriesLock);
         BindingOperations.EnableCollectionSynchronization(ProcessFlows, _logEntriesLock);
-        BindingOperations.EnableCollectionSynchronization(Sessions, _logEntriesLock);
+        BindingOperations.EnableCollectionSynchronization(Views, _logEntriesLock);
 
-        // Setup filtered view
-        FilteredLogEntries = CollectionViewSource.GetDefaultView(LogEntries);
-        FilteredLogEntries.Filter = FilterLogEntry;
-
-        // Initialize selected session
-        SelectedSession = SessionViewModel.All;
+        // Create default "All" view
+        var allView = new LogViewViewModel(LogEntries, _logEntriesLock, "All");
+        Views.Add(allView);
+        SelectedView = allView;
 
         // Initialize commands
         StartCommand = new AsyncRelayCommand(StartAsync, () => !IsListening);
@@ -68,6 +64,12 @@ public class MainViewModel : ViewModelBase, IDisposable
         ClearLogCommand = new RelayCommand(ClearLog);
         ClearWatchesCommand = new RelayCommand(ClearWatches);
         ClearProcessFlowCommand = new RelayCommand(ClearProcessFlow);
+
+        // Tab management commands
+        AddViewCommand = new RelayCommand(AddView);
+        RemoveViewCommand = new RelayCommand<LogViewViewModel>(RemoveView, CanRemoveView);
+        RenameViewCommand = new RelayCommand<LogViewViewModel>(RenameView);
+        DuplicateViewCommand = new RelayCommand<LogViewViewModel>(DuplicateView);
     }
 
     #region Properties
@@ -75,38 +77,27 @@ public class MainViewModel : ViewModelBase, IDisposable
     public ObservableCollection<LogEntry> LogEntries { get; }
     public ObservableCollection<Watch> Watches { get; }
     public ObservableCollection<ProcessFlow> ProcessFlows { get; }
-    public ObservableCollection<SessionViewModel> Sessions { get; }
-    public ICollectionView FilteredLogEntries { get; }
+    public ObservableCollection<LogViewViewModel> Views { get; }
 
-    public LogEntry? SelectedLogEntry
+    public LogViewViewModel? SelectedView
     {
-        get => _selectedLogEntry;
-        set => SetProperty(ref _selectedLogEntry, value);
-    }
-
-    public string FilterText
-    {
-        get => _filterText;
+        get => _selectedView;
         set
         {
-            if (SetProperty(ref _filterText, value))
+            if (_selectedView != null)
+                _selectedView.IsSelected = false;
+
+            if (SetProperty(ref _selectedView, value))
             {
-                FilteredLogEntries.Refresh();
+                if (_selectedView != null)
+                    _selectedView.IsSelected = true;
+
+                OnPropertyChanged(nameof(SelectedLogEntry));
             }
         }
     }
 
-    public SessionViewModel? SelectedSession
-    {
-        get => _selectedSession;
-        set
-        {
-            if (SetProperty(ref _selectedSession, value))
-            {
-                FilteredLogEntries.Refresh();
-            }
-        }
-    }
+    public LogEntry? SelectedLogEntry => SelectedView?.SelectedLogEntry;
 
     public string StatusText
     {
@@ -147,6 +138,12 @@ public class MainViewModel : ViewModelBase, IDisposable
     public ICommand ClearLogCommand { get; }
     public ICommand ClearWatchesCommand { get; }
     public ICommand ClearProcessFlowCommand { get; }
+
+    // Tab management
+    public ICommand AddViewCommand { get; }
+    public ICommand RemoveViewCommand { get; }
+    public ICommand RenameViewCommand { get; }
+    public ICommand DuplicateViewCommand { get; }
 
     #endregion
 
@@ -198,6 +195,61 @@ public class MainViewModel : ViewModelBase, IDisposable
 
     #endregion
 
+    #region View Management
+
+    private void AddView()
+    {
+        _viewCounter++;
+        var newView = new LogViewViewModel(LogEntries, _logEntriesLock, $"View {_viewCounter}");
+        Views.Add(newView);
+        SelectedView = newView;
+    }
+
+    private bool CanRemoveView(LogViewViewModel? view)
+    {
+        // Can't remove if it's the last view
+        return view != null && Views.Count > 1;
+    }
+
+    private void RemoveView(LogViewViewModel? view)
+    {
+        if (view == null || Views.Count <= 1) return;
+
+        var index = Views.IndexOf(view);
+        Views.Remove(view);
+
+        // Select adjacent view
+        if (index >= Views.Count)
+            index = Views.Count - 1;
+        SelectedView = Views[index];
+    }
+
+    private void RenameView(LogViewViewModel? view)
+    {
+        if (view == null) return;
+
+        // This would typically show a dialog - for now we'll handle it in the UI
+        // The view name is already bindable and editable
+    }
+
+    private void DuplicateView(LogViewViewModel? view)
+    {
+        if (view == null) return;
+
+        _viewCounter++;
+        var newView = new LogViewViewModel(LogEntries, _logEntriesLock, $"{view.Name} (Copy)")
+        {
+            AppNameFilter = view.AppNameFilter,
+            SessionFilter = view.SessionFilter,
+            TextFilter = view.TextFilter,
+            SelectedLogLevel = view.SelectedLogLevel
+        };
+        Views.Add(newView);
+        SelectedView = newView;
+    }
+
+    #endregion
+
     #region Private Methods
 
     private void OnPacketReceived(object? sender, PacketReceivedEventArgs e)
@@ -234,20 +286,12 @@ public class MainViewModel : ViewModelBase, IDisposable
         lock (_logEntriesLock)
         {
             LogEntries.Add(logEntry);
+        }
 
-            // Update session list
-            if (!string.IsNullOrEmpty(logEntry.SessionName) &&
-                !_sessionMap.ContainsKey(logEntry.SessionName))
-            {
-                var session = new SessionViewModel { Name = logEntry.SessionName };
-                _sessionMap[logEntry.SessionName] = session;
-                Sessions.Add(session);
-            }
-
-            if (_sessionMap.TryGetValue(logEntry.SessionName, out var existingSession))
-            {
-                existingSession.EntryCount++;
-            }
+        // Notify all views to update their filtered counts
+        foreach (var view in Views)
+        {
+            view.RefreshFilter();
         }
 
         OnPropertyChanged(nameof(EntryCount));
@@ -337,29 +381,6 @@ public class MainViewModel : ViewModelBase, IDisposable
         });
     }
 
-    private bool FilterLogEntry(object obj)
-    {
-        if (obj is not LogEntry entry)
-            return false;
-
-        // Session filter
-        if (SelectedSession != null && SelectedSession != SessionViewModel.All)
-        {
-            if (!entry.SessionName.Equals(SelectedSession.Name, StringComparison.OrdinalIgnoreCase))
-                return false;
-        }
-
-        // Text filter
-        if (!string.IsNullOrWhiteSpace(FilterText))
-        {
-            return entry.Title.Contains(FilterText, StringComparison.OrdinalIgnoreCase) ||
-                   entry.SessionName.Contains(FilterText, StringComparison.OrdinalIgnoreCase) ||
-                   (entry.DataAsString?.Contains(FilterText, StringComparison.OrdinalIgnoreCase) ?? false);
-        }
-
-        return true;
-    }
-
     private void ClearAll()
     {
         ClearLog();
@@ -372,10 +393,13 @@ public class MainViewModel : ViewModelBase, IDisposable
         lock (_logEntriesLock)
         {
             LogEntries.Clear();
-            _sessionMap.Clear();
-            Sessions.Clear();
-            Sessions.Add(SessionViewModel.All);
         }
+
+        foreach (var view in Views)
+        {
+            view.Clear();
+        }
+
         OnPropertyChanged(nameof(EntryCount));
     }
 

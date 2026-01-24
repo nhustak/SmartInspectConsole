@@ -102,6 +102,46 @@
                 </Setter.Value>
             </Setter>
         </Style>
+
+        <Style TargetType="TabControl">
+            <Setter Property="Background" Value="{DynamicResource BackgroundBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}"/>
+        </Style>
+
+        <Style TargetType="TabItem">
+            <Setter Property="Background" Value="{DynamicResource SurfaceBrush}"/>
+            <Setter Property="Foreground" Value="{DynamicResource ForegroundBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}"/>
+            <Setter Property="Padding" Value="10,4"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="TabItem">
+                        <Border x:Name="Border"
+                                Background="{DynamicResource SurfaceBrush}"
+                                BorderBrush="{DynamicResource BorderBrush}"
+                                BorderThickness="1,1,1,0"
+                                CornerRadius="4,4,0,0"
+                                Margin="2,0,0,0"
+                                Padding="{TemplateBinding Padding}">
+                            <ContentPresenter x:Name="ContentSite"
+                                              ContentSource="Header"
+                                              HorizontalAlignment="Center"
+                                              VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter TargetName="Border" Property="Background" Value="{DynamicResource BackgroundBrush}"/>
+                                <Setter TargetName="Border" Property="BorderThickness" Value="1,1,1,0"/>
+                                <Setter TargetName="Border" Property="Margin" Value="2,-2,0,0"/>
+                            </Trigger>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Border" Property="Background" Value="{DynamicResource HoverBrush}"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
     </Window.Resources>
 
     <Grid>
@@ -118,6 +158,10 @@
                 <MenuItem Header="_Exit" Click="Exit_Click"/>
             </MenuItem>
             <MenuItem Header="_View">
+                <MenuItem Header="_Add View" Command="{Binding AddViewCommand}"/>
+                <MenuItem Header="_Remove View" Command="{Binding RemoveViewCommand}" CommandParameter="{Binding SelectedView}"/>
+                <MenuItem Header="_Duplicate View" Command="{Binding DuplicateViewCommand}" CommandParameter="{Binding SelectedView}"/>
+                <Separator/>
                 <MenuItem Header="_Clear All" Command="{Binding ClearAllCommand}"/>
                 <MenuItem Header="Clear _Log" Command="{Binding ClearLogCommand}"/>
                 <MenuItem Header="Clear _Watches" Command="{Binding ClearWatchesCommand}"/>
@@ -156,14 +200,12 @@
                     </StackPanel>
                 </Button>
                 <Separator/>
-                <TextBlock Text="Filter:" VerticalAlignment="Center" Margin="4,0"/>
-                <TextBox Width="200" Text="{Binding FilterText, UpdateSourceTrigger=PropertyChanged}"
-                         VerticalAlignment="Center"/>
-                <Separator/>
-                <TextBlock Text="Session:" VerticalAlignment="Center" Margin="4,0"/>
-                <ComboBox Width="150" ItemsSource="{Binding Sessions}"
-                          SelectedItem="{Binding SelectedSession}"
-                          DisplayMemberPath="Name"/>
+                <Button Command="{Binding AddViewCommand}" ToolTip="Add New View">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="+" FontSize="14" FontWeight="Bold" Margin="0,0,4,0"/>
+                        <TextBlock Text="Add View"/>
+                    </StackPanel>
+                </Button>
             </ToolBar>
         </ToolBarTray>
 
@@ -185,31 +227,102 @@
                     <RowDefinition Height="*"/>
                 </Grid.RowDefinitions>
 
-                <!-- Log Entries -->
-                <GroupBox Grid.Row="0" Header="Log Entries" Margin="4">
-                    <ListView ItemsSource="{Binding FilteredLogEntries}"
-                              SelectedItem="{Binding SelectedLogEntry}"
-                              VirtualizingPanel.IsVirtualizing="True"
-                              VirtualizingPanel.VirtualizationMode="Recycling"
-                              ScrollViewer.CanContentScroll="True">
-                        <ListView.View>
-                            <GridView>
-                                <GridViewColumn Header="" Width="30">
-                                    <GridViewColumn.CellTemplate>
-                                        <DataTemplate>
-                                            <TextBlock Text="{Binding LogEntryType, Converter={StaticResource LogEntryTypeToIconConverter}}"
-                                                       FontSize="14"/>
-                                        </DataTemplate>
-                                    </GridViewColumn.CellTemplate>
-                                </GridViewColumn>
-                                <GridViewColumn Header="Time" Width="90" DisplayMemberBinding="{Binding Timestamp, StringFormat=HH:mm:ss.fff}"/>
-                                <GridViewColumn Header="Session" Width="100" DisplayMemberBinding="{Binding SessionName}"/>
-                                <GridViewColumn Header="Title" Width="400" DisplayMemberBinding="{Binding Title}"/>
-                                <GridViewColumn Header="Thread" Width="60" DisplayMemberBinding="{Binding ThreadId}"/>
-                            </GridView>
-                        </ListView.View>
-                    </ListView>
-                </GroupBox>
+                <!-- Log Entries with Tabbed Views -->
+                <TabControl Grid.Row="0"
+                            ItemsSource="{Binding Views}"
+                            SelectedItem="{Binding SelectedView}"
+                            Margin="4">
+                    <TabControl.ItemTemplate>
+                        <DataTemplate>
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="{Binding Name}" VerticalAlignment="Center"/>
+                                <TextBlock Text=" (" VerticalAlignment="Center" Foreground="{DynamicResource ForegroundSecondaryBrush}"/>
+                                <TextBlock Text="{Binding FilteredCount}" VerticalAlignment="Center" Foreground="{DynamicResource ForegroundSecondaryBrush}"/>
+                                <TextBlock Text=")" VerticalAlignment="Center" Foreground="{DynamicResource ForegroundSecondaryBrush}"/>
+                                <Button Content="x"
+                                        Command="{Binding DataContext.RemoveViewCommand, RelativeSource={RelativeSource AncestorType=TabControl}}"
+                                        CommandParameter="{Binding}"
+                                        Background="Transparent"
+                                        BorderThickness="0"
+                                        Padding="4,0"
+                                        Margin="8,0,0,0"
+                                        FontSize="10"
+                                        VerticalAlignment="Center"
+                                        ToolTip="Close View"/>
+                            </StackPanel>
+                        </DataTemplate>
+                    </TabControl.ItemTemplate>
+                    <TabControl.ContentTemplate>
+                        <DataTemplate>
+                            <Grid>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="*"/>
+                                </Grid.RowDefinitions>
+
+                                <!-- View Filters -->
+                                <Border Grid.Row="0" Background="{DynamicResource SurfaceBrush}" Padding="8,4" Margin="0,0,0,4">
+                                    <WrapPanel>
+                                        <StackPanel Orientation="Horizontal" Margin="0,0,16,0">
+                                            <TextBlock Text="App:" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                                            <TextBox Width="120" Text="{Binding AppNameFilter, UpdateSourceTrigger=PropertyChanged}"
+                                                     ToolTip="Filter by application name"/>
+                                        </StackPanel>
+                                        <StackPanel Orientation="Horizontal" Margin="0,0,16,0">
+                                            <TextBlock Text="Session:" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                                            <TextBox Width="120" Text="{Binding SessionFilter, UpdateSourceTrigger=PropertyChanged}"
+                                                     ToolTip="Filter by session name"/>
+                                        </StackPanel>
+                                        <StackPanel Orientation="Horizontal" Margin="0,0,16,0">
+                                            <TextBlock Text="Text:" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                                            <TextBox Width="150" Text="{Binding TextFilter, UpdateSourceTrigger=PropertyChanged}"
+                                                     ToolTip="Filter by title or data content"/>
+                                        </StackPanel>
+                                        <StackPanel Orientation="Horizontal" Margin="0,0,16,0">
+                                            <TextBlock Text="Level:" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                                            <ComboBox Width="100"
+                                                      ItemsSource="{Binding LogLevels}"
+                                                      SelectedItem="{Binding SelectedLogLevel}"
+                                                      DisplayMemberPath="DisplayName"
+                                                      ToolTip="Minimum log level"/>
+                                        </StackPanel>
+                                        <StackPanel Orientation="Horizontal">
+                                            <TextBlock Text="Name:" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                                            <TextBox Width="100" Text="{Binding Name, UpdateSourceTrigger=PropertyChanged}"
+                                                     ToolTip="View name (shown in tab)"/>
+                                        </StackPanel>
+                                    </WrapPanel>
+                                </Border>
+
+                                <!-- Log Entries List -->
+                                <ListView Grid.Row="1"
+                                          ItemsSource="{Binding FilteredLogEntries}"
+                                          SelectedItem="{Binding SelectedLogEntry}"
+                                          VirtualizingPanel.IsVirtualizing="True"
+                                          VirtualizingPanel.VirtualizationMode="Recycling"
+                                          ScrollViewer.CanContentScroll="True">
+                                    <ListView.View>
+                                        <GridView>
+                                            <GridViewColumn Header="" Width="30">
+                                                <GridViewColumn.CellTemplate>
+                                                    <DataTemplate>
+                                                        <TextBlock Text="{Binding LogEntryType, Converter={StaticResource LogEntryTypeToIconConverter}}"
+                                                                   FontSize="14"/>
+                                                    </DataTemplate>
+                                                </GridViewColumn.CellTemplate>
+                                            </GridViewColumn>
+                                            <GridViewColumn Header="Time" Width="90" DisplayMemberBinding="{Binding Timestamp, StringFormat=HH:mm:ss.fff}"/>
+                                            <GridViewColumn Header="App" Width="100" DisplayMemberBinding="{Binding AppName}"/>
+                                            <GridViewColumn Header="Session" Width="80" DisplayMemberBinding="{Binding SessionName}"/>
+                                            <GridViewColumn Header="Title" Width="350" DisplayMemberBinding="{Binding Title}"/>
+                                            <GridViewColumn Header="Thread" Width="50" DisplayMemberBinding="{Binding ThreadId}"/>
+                                        </GridView>
+                                    </ListView.View>
+                                </ListView>
+                            </Grid>
+                        </DataTemplate>
+                    </TabControl.ContentTemplate>
+                </TabControl>
 
                 <GridSplitter Grid.Row="1" Height="5" HorizontalAlignment="Stretch"
                               Background="{DynamicResource BorderBrush}" ResizeDirection="Rows"/>
@@ -254,10 +367,14 @@
             <!-- Right Panel - Details -->
             <GroupBox Grid.Column="2" Header="Details" Margin="4">
                 <ScrollViewer VerticalScrollBarVisibility="Auto">
-                    <StackPanel Margin="8" DataContext="{Binding SelectedLogEntry}">
+                    <StackPanel Margin="8" DataContext="{Binding SelectedView.SelectedLogEntry}">
                         <TextBlock Text="Title:" FontWeight="Bold" Margin="0,0,0,4"/>
                         <TextBox Text="{Binding Title, Mode=OneWay}" IsReadOnly="True"
                                  TextWrapping="Wrap" Margin="0,0,0,12"/>
+
+                        <TextBlock Text="App:" FontWeight="Bold" Margin="0,0,0,4"/>
+                        <TextBox Text="{Binding AppName, Mode=OneWay}" IsReadOnly="True"
+                                 Margin="0,0,0,12"/>
 
                         <TextBlock Text="Session:" FontWeight="Bold" Margin="0,0,0,4"/>
                         <TextBox Text="{Binding SessionName, Mode=OneWay}" IsReadOnly="True"
@@ -269,10 +386,6 @@
 
                         <TextBlock Text="Type:" FontWeight="Bold" Margin="0,0,0,4"/>
                         <TextBox Text="{Binding LogEntryType, Mode=OneWay}" IsReadOnly="True"
-                                 Margin="0,0,0,12"/>
-
-                        <TextBlock Text="App:" FontWeight="Bold" Margin="0,0,0,4"/>
-                        <TextBox Text="{Binding AppName, Mode=OneWay}" IsReadOnly="True"
                                  Margin="0,0,0,12"/>
 
                         <TextBlock Text="Host:" FontWeight="Bold" Margin="0,0,0,4"/>
@@ -344,7 +457,7 @@
             </StatusBarItem>
             <Separator Background="{DynamicResource BorderBrush}"/>
             <StatusBarItem>
-                <TextBlock Text="{Binding EntryCount, StringFormat=Entries: {0}}"/>
+                <TextBlock Text="{Binding EntryCount, StringFormat=Total: {0}}"/>
             </StatusBarItem>
         </StatusBar>
     </Grid>
