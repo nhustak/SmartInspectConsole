@@ -1,4 +1,7 @@
 using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Input;
+using SmartInspectConsole.Core.Packets;
 using SmartInspectConsole.ViewModels;
 
 namespace SmartInspectConsole;
@@ -57,5 +60,13 @@ public partial class MainWindow : Window
         App.IsDarkTheme = false;
         DarkThemeMenuItem.IsChecked = false;
         LightThemeMenuItem.IsChecked = true;
+    }
+
+    private void LogEntryList_MouseDoubleClick(object sender, MouseButtonEventArgs e)
+    {
+        if (sender is ListView listView && listView.SelectedItem is LogEntry logEntry)
+        {
+            _viewModel.OpenLogEntryDetailCommand.Execute(logEntry);
+        }
     }
 }

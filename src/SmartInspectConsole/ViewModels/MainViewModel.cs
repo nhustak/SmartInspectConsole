@@ -25,6 +25,7 @@ public class MainViewModel : ViewModelBase, IDisposable
     private bool _isListening;
     private LogViewViewModel? _selectedView;
     private int _viewCounter = 1;
+    private LogEntryDetailViewModel? _selectedDetailTab;
 
     // Panel visibility
     private bool _showWatchesPanel = true;
@@ -52,12 +53,14 @@ public class MainViewModel : ViewModelBase, IDisposable
         Watches = new ObservableCollection<Watch>();
         ProcessFlows = new ObservableCollection<ProcessFlow>();
         Views = new ObservableCollection<LogViewViewModel>();
+        DetailTabs = new ObservableCollection<LogEntryDetailViewModel>();
 
         // Enable collection synchronization for cross-thread access
         BindingOperations.EnableCollectionSynchronization(LogEntries, _logEntriesLock);
         BindingOperations.EnableCollectionSynchronization(Watches, _logEntriesLock);
         BindingOperations.EnableCollectionSynchronization(ProcessFlows, _logEntriesLock);
         BindingOperations.EnableCollectionSynchronization(Views, _logEntriesLock);
+        BindingOperations.EnableCollectionSynchronization(DetailTabs, _logEntriesLock);
 
         // Create default "All" view
         var allView = new LogViewViewModel(LogEntries, _logEntriesLock, "All");
@@ -83,6 +86,10 @@ public class MainViewModel : ViewModelBase, IDisposable
         HideWatchesPanelCommand = new RelayCommand(() => ShowWatchesPanel = false);
         HideProcessFlowPanelCommand = new RelayCommand(() => ShowProcessFlowPanel = false);
         HideDetailsPanelCommand = new RelayCommand(() => ShowDetailsPanel = false);
+
+        // Detail tab commands
+        OpenLogEntryDetailCommand = new RelayCommand<LogEntry>(OpenLogEntryDetail);
+        CloseDetailTabCommand = new RelayCommand<LogEntryDetailViewModel>(CloseDetailTab);
     }
 
     #region Properties
@@ -91,6 +98,15 @@ public class MainViewModel : ViewModelBase, IDisposable
     public ObservableCollection<Watch> Watches { get; }
     public ObservableCollection<ProcessFlow> ProcessFlows { get; }
     public ObservableCollection<LogViewViewModel> Views { get; }
+    public ObservableCollection<LogEntryDetailViewModel> DetailTabs { get; }
+
+    public LogEntryDetailViewModel? SelectedDetailTab
+    {
+        get => _selectedDetailTab;
+        set => SetProperty(ref _selectedDetailTab, value);
+    }
+
+    public bool HasDetailTabs => DetailTabs.Count > 0;
 
     public LogViewViewModel? SelectedView
     {
@@ -182,6 +198,10 @@ public class MainViewModel : ViewModelBase, IDisposable
     public ICommand HideWatchesPanelCommand { get; }
     public ICommand HideProcessFlowPanelCommand { get; }
     public ICommand HideDetailsPanelCommand { get; }
+
+    // Detail tabs
+    public ICommand OpenLogEntryDetailCommand { get; }
+    public ICommand CloseDetailTabCommand { get; }
 
     #endregion
 
@@ -302,6 +322,50 @@ public class MainViewModel : ViewModelBase, IDisposable
         {
             editViewModel.SaveTo(view);
         }
+    }
+
+    #endregion
+
+    #region Detail Tab Management
+
+    private void OpenLogEntryDetail(LogEntry? logEntry)
+    {
+        if (logEntry == null) return;
+
+        // Check if already open
+        var existing = DetailTabs.FirstOrDefault(d => d.LogEntry == logEntry);
+        if (existing != null)
+        {
+            SelectedDetailTab = existing;
+            return;
+        }
+
+        var detailVm = new LogEntryDetailViewModel(logEntry);
+        DetailTabs.Add(detailVm);
+        SelectedDetailTab = detailVm;
+        OnPropertyChanged(nameof(HasDetailTabs));
+    }
+
+    private void CloseDetailTab(LogEntryDetailViewModel? detailVm)
+    {
+        if (detailVm == null) return;
+
+        var index = DetailTabs.IndexOf(detailVm);
+        DetailTabs.Remove(detailVm);
+
+        // Select adjacent tab if available
+        if (DetailTabs.Count > 0)
+        {
+            if (index >= DetailTabs.Count)
+                index = DetailTabs.Count - 1;
+            SelectedDetailTab = DetailTabs[index];
+        }
+        else
+        {
+            SelectedDetailTab = null;
+        }
+
+        OnPropertyChanged(nameof(HasDetailTabs));
     }
 
     #endregion
@@ -458,6 +522,7 @@ public class MainViewModel : ViewModelBase, IDisposable
         lock (_logEntriesLock)
         {
             LogEntries.Clear();
+            DetailTabs.Clear();
         }
 
         foreach (var view in Views)
@@ -465,7 +530,9 @@ public class MainViewModel : ViewModelBase, IDisposable
             view.Clear();
         }
 
+        SelectedDetailTab = null;
         OnPropertyChanged(nameof(EntryCount));
+        OnPropertyChanged(nameof(HasDetailTabs));
     }
 
     private void ClearWatches()

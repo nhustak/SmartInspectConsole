@@ -22,6 +22,7 @@ public class SmartInspectPipeListener : IPacketListener
     private readonly string _pipeName;
     private CancellationTokenSource? _cts;
     private readonly ConcurrentDictionary<string, NamedPipeServerStream> _clients = new();
+    private readonly List<Task> _listenerTasks = new();
     private readonly BinaryPacketReader _packetReader = new();
     private int _clientCounter;
 
@@ -54,11 +55,12 @@ public class SmartInspectPipeListener : IPacketListener
 
         _cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         IsListening = true;
+        _listenerTasks.Clear();
 
         // Start multiple pipe instances to handle concurrent connections
         for (int i = 0; i < MaxInstances; i++)
         {
-            _ = ListenForConnectionAsync(_cts.Token);
+            _listenerTasks.Add(ListenForConnectionAsync(_cts.Token));
         }
 
         await Task.CompletedTask;
@@ -79,11 +81,31 @@ public class SmartInspectPipeListener : IPacketListener
         }
         _clients.Clear();
 
-        await Task.CompletedTask;
+        // Wait for all listener tasks to complete (with timeout)
+        if (_listenerTasks.Count > 0)
+        {
+            try
+            {
+                await Task.WhenAll(_listenerTasks).WaitAsync(TimeSpan.FromSeconds(2));
+            }
+            catch (TimeoutException)
+            {
+                // Tasks didn't complete in time, but we've cancelled them
+            }
+            catch (OperationCanceledException)
+            {
+                // Expected when cancellation propagates
+            }
+            _listenerTasks.Clear();
+        }
     }
 
     private async Task ListenForConnectionAsync(CancellationToken cancellationToken)
     {
+        int retryDelay = 100;
+        const int MaxRetryDelay = 5000;
+        string? lastErrorMessage = null;
+
         while (!cancellationToken.IsCancellationRequested && IsListening)
         {
             NamedPipeServerStream? pipeServer = null;
@@ -103,11 +125,15 @@ public class SmartInspectPipeListener : IPacketListener
                     MaxInstances,
                     PipeTransmissionMode.Byte,
                     PipeOptions.Asynchronous,
-                    0, // inBufferSize (default)
-                    0, // outBufferSize (default)
+                    0,
+                    0,
                     pipeSecurity);
 
                 await pipeServer.WaitForConnectionAsync(cancellationToken);
+
+                // Reset retry delay on successful connection
+                retryDelay = 100;
+                lastErrorMessage = null;
 
                 var clientId = $"pipe-{Interlocked.Increment(ref _clientCounter)}";
                 _clients[clientId] = pipeServer;
@@ -123,8 +149,16 @@ public class SmartInspectPipeListener : IPacketListener
             }
             catch (Exception ex)
             {
-                OnError(ex);
-                await Task.Delay(100, cancellationToken); // Brief delay before retrying
+                // Only report error if it's different from the last one (avoid spam)
+                if (ex.Message != lastErrorMessage)
+                {
+                    OnError(ex);
+                    lastErrorMessage = ex.Message;
+                }
+
+                // Exponential backoff for retries
+                await Task.Delay(retryDelay, cancellationToken);
+                retryDelay = Math.Min(retryDelay * 2, MaxRetryDelay);
             }
             finally
             {
@@ -136,7 +170,7 @@ public class SmartInspectPipeListener : IPacketListener
 
     private async Task HandleClientAsync(NamedPipeServerStream pipeServer, string clientId, CancellationToken cancellationToken)
     {
-        var clientBanner = string.Empty;
+        var clientInfo = string.Empty;
 
         try
         {
@@ -145,11 +179,11 @@ public class SmartInspectPipeListener : IPacketListener
             await pipeServer.WriteAsync(bannerBytes, cancellationToken);
             await pipeServer.FlushAsync(cancellationToken);
 
-            // Read client banner (until newline)
-            clientBanner = await ReadUntilNewlineAsync(pipeServer, cancellationToken);
+            // Read client banner (until newline) - same protocol as TCP
+            clientInfo = await ReadUntilNewlineAsync(pipeServer, cancellationToken);
 
             // Notify client connected
-            OnClientConnected(new ClientEventArgs(clientId, clientBanner));
+            OnClientConnected(new ClientEventArgs(clientId, clientInfo));
 
             // Packet processing loop
             while (!cancellationToken.IsCancellationRequested && pipeServer.IsConnected)
@@ -194,7 +228,7 @@ public class SmartInspectPipeListener : IPacketListener
             _clients.TryRemove(clientId, out _);
             try { pipeServer.Close(); } catch { }
             pipeServer.Dispose();
-            OnClientDisconnected(new ClientEventArgs(clientId, clientBanner));
+            OnClientDisconnected(new ClientEventArgs(clientId, clientInfo));
 
             // Start a new listener to replace this one
             if (IsListening && !cancellationToken.IsCancellationRequested)
@@ -213,7 +247,7 @@ public class SmartInspectPipeListener : IPacketListener
         {
             var read = await stream.ReadAsync(buffer, cancellationToken);
             if (read == 0)
-                break;
+                break; // Connection closed
 
             var c = (char)buffer[0];
             if (c == '\n')

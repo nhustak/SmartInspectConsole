@@ -6,6 +6,7 @@
         xmlns:local="clr-namespace:SmartInspectConsole"
         xmlns:vm="clr-namespace:SmartInspectConsole.ViewModels"
         xmlns:conv="clr-namespace:SmartInspectConsole.Converters"
+        xmlns:views="clr-namespace:SmartInspectConsole.Views"
         mc:Ignorable="d"
         Title="SmartInspect Console"
         Height="800" Width="1200"
@@ -235,6 +236,8 @@
                 <Grid.RowDefinitions>
                     <RowDefinition Height="2*"/>
                     <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="{Binding HasDetailTabs, Converter={StaticResource BoolToGridLengthConverter}, ConverterParameter=1.5}"/>
+                    <RowDefinition Height="Auto"/>
                     <RowDefinition Height="{Binding ShowWatchesPanel, Converter={StaticResource BoolToGridLengthConverter}}"/>
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="{Binding ShowProcessFlowPanel, Converter={StaticResource BoolToGridLengthConverter}}"/>
@@ -340,7 +343,8 @@
                                           SelectedItem="{Binding SelectedLogEntry}"
                                           VirtualizingPanel.IsVirtualizing="True"
                                           VirtualizingPanel.VirtualizationMode="Recycling"
-                                          ScrollViewer.CanContentScroll="True">
+                                          ScrollViewer.CanContentScroll="True"
+                                          MouseDoubleClick="LogEntryList_MouseDoubleClick">
                                     <ListView.View>
                                         <GridView>
                                             <GridViewColumn Header="" Width="30">
@@ -367,10 +371,44 @@
 
                 <GridSplitter Grid.Row="1" Height="5" HorizontalAlignment="Stretch"
                               Background="{DynamicResource BorderBrush}" ResizeDirection="Rows"
+                              Visibility="{Binding HasDetailTabs, Converter={StaticResource BoolToVisibilityConverter}}"/>
+
+                <!-- Detail Tabs -->
+                <TabControl Grid.Row="2"
+                            ItemsSource="{Binding DetailTabs}"
+                            SelectedItem="{Binding SelectedDetailTab}"
+                            Margin="4"
+                            Visibility="{Binding HasDetailTabs, Converter={StaticResource BoolToVisibilityConverter}}">
+                    <TabControl.ItemTemplate>
+                        <DataTemplate>
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="{Binding TabTitle}" VerticalAlignment="Center"/>
+                                <Button Content="x"
+                                        Command="{Binding DataContext.CloseDetailTabCommand, RelativeSource={RelativeSource AncestorType=TabControl}}"
+                                        CommandParameter="{Binding}"
+                                        Background="Transparent"
+                                        BorderThickness="0"
+                                        Padding="4,0"
+                                        Margin="6,0,0,0"
+                                        FontSize="10"
+                                        VerticalAlignment="Center"
+                                        ToolTip="Close Tab"/>
+                            </StackPanel>
+                        </DataTemplate>
+                    </TabControl.ItemTemplate>
+                    <TabControl.ContentTemplate>
+                        <DataTemplate>
+                            <views:LogEntryDetailView DataContext="{Binding}"/>
+                        </DataTemplate>
+                    </TabControl.ContentTemplate>
+                </TabControl>
+
+                <GridSplitter Grid.Row="3" Height="5" HorizontalAlignment="Stretch"
+                              Background="{DynamicResource BorderBrush}" ResizeDirection="Rows"
                               Visibility="{Binding ShowWatchesPanel, Converter={StaticResource BoolToVisibilityConverter}}"/>
 
                 <!-- Watches -->
-                <GroupBox Grid.Row="2" Header="Watches" Margin="4"
+                <GroupBox Grid.Row="4" Header="Watches" Margin="4"
                           Visibility="{Binding ShowWatchesPanel, Converter={StaticResource BoolToVisibilityConverter}}">
                     <GroupBox.ContextMenu>
                         <ContextMenu>
@@ -392,12 +430,12 @@
                     </ListView>
                 </GroupBox>
 
-                <GridSplitter Grid.Row="3" Height="5" HorizontalAlignment="Stretch"
+                <GridSplitter Grid.Row="5" Height="5" HorizontalAlignment="Stretch"
                               Background="{DynamicResource BorderBrush}" ResizeDirection="Rows"
                               Visibility="{Binding ShowProcessFlowPanel, Converter={StaticResource BoolToVisibilityConverter}}"/>
 
                 <!-- Process Flow -->
-                <GroupBox Grid.Row="4" Header="Process Flow" Margin="4"
+                <GroupBox Grid.Row="6" Header="Process Flow" Margin="4"
                           Visibility="{Binding ShowProcessFlowPanel, Converter={StaticResource BoolToVisibilityConverter}}">
                     <GroupBox.ContextMenu>
                         <ContextMenu>
