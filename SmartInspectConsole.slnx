@@ -1,0 +1,6 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/SmartInspectConsole.Core/SmartInspectConsole.Core.csproj" />
+    <Project Path="src/SmartInspectConsole/SmartInspectConsole.csproj" />
+  </Folder>
+</Solution>

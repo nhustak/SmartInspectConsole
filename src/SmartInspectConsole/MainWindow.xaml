@@ -1,0 +1,351 @@
+<Window x:Class="SmartInspectConsole.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:local="clr-namespace:SmartInspectConsole"
+        xmlns:vm="clr-namespace:SmartInspectConsole.ViewModels"
+        xmlns:conv="clr-namespace:SmartInspectConsole.Converters"
+        mc:Ignorable="d"
+        Title="SmartInspect Console"
+        Height="800" Width="1200"
+        WindowStartupLocation="CenterScreen"
+        Background="{DynamicResource BackgroundBrush}"
+        Foreground="{DynamicResource ForegroundBrush}">
+
+    <Window.Resources>
+        <conv:LogEntryTypeToIconConverter x:Key="LogEntryTypeToIconConverter"/>
+        <conv:ColorToBrushConverter x:Key="ColorToBrushConverter"/>
+        <conv:BoolToVisibilityConverter x:Key="BoolToVisibilityConverter"/>
+
+        <!-- Local styles that use DynamicResource for theme switching -->
+        <Style TargetType="GroupBox">
+            <Setter Property="Background" Value="{DynamicResource SurfaceBrush}"/>
+            <Setter Property="Foreground" Value="{DynamicResource ForegroundBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}"/>
+            <Setter Property="Padding" Value="4"/>
+        </Style>
+
+        <Style TargetType="ListView">
+            <Setter Property="Background" Value="{DynamicResource BackgroundBrush}"/>
+            <Setter Property="Foreground" Value="{DynamicResource ForegroundBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}"/>
+        </Style>
+
+        <Style TargetType="ListViewItem">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Foreground" Value="{DynamicResource ForegroundBrush}"/>
+            <Setter Property="BorderBrush" Value="Transparent"/>
+            <Setter Property="Padding" Value="4,2"/>
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="Background" Value="{DynamicResource HoverBrush}"/>
+                </Trigger>
+                <Trigger Property="IsSelected" Value="True">
+                    <Setter Property="Background" Value="{DynamicResource SelectionBrush}"/>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+
+        <Style TargetType="GridViewColumnHeader">
+            <Setter Property="Background" Value="{DynamicResource SurfaceBrush}"/>
+            <Setter Property="Foreground" Value="{DynamicResource ForegroundBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}"/>
+            <Setter Property="Padding" Value="8,4"/>
+        </Style>
+
+        <Style TargetType="TextBox">
+            <Setter Property="Background" Value="{DynamicResource BackgroundBrush}"/>
+            <Setter Property="Foreground" Value="{DynamicResource ForegroundBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}"/>
+            <Setter Property="CaretBrush" Value="{DynamicResource ForegroundBrush}"/>
+            <Setter Property="Padding" Value="4,2"/>
+        </Style>
+
+        <Style TargetType="ComboBox">
+            <Setter Property="Background" Value="{DynamicResource SurfaceBrush}"/>
+            <Setter Property="Foreground" Value="{DynamicResource ForegroundBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}"/>
+        </Style>
+
+        <Style TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource ForegroundBrush}"/>
+        </Style>
+
+        <Style TargetType="Button">
+            <Setter Property="Background" Value="{DynamicResource SurfaceBrush}"/>
+            <Setter Property="Foreground" Value="{DynamicResource ForegroundBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}"/>
+            <Setter Property="Padding" Value="8,4"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="1"
+                                Padding="{TemplateBinding Padding}"
+                                CornerRadius="2">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter Property="Background" Value="{DynamicResource HoverBrush}"/>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter Property="Background" Value="{DynamicResource AccentBrush}"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Opacity" Value="0.5"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </Window.Resources>
+
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <!-- Menu -->
+        <Menu Grid.Row="0" Background="{DynamicResource SurfaceBrush}" Foreground="{DynamicResource ForegroundBrush}">
+            <MenuItem Header="_File">
+                <MenuItem Header="_Exit" Click="Exit_Click"/>
+            </MenuItem>
+            <MenuItem Header="_View">
+                <MenuItem Header="_Clear All" Command="{Binding ClearAllCommand}"/>
+                <MenuItem Header="Clear _Log" Command="{Binding ClearLogCommand}"/>
+                <MenuItem Header="Clear _Watches" Command="{Binding ClearWatchesCommand}"/>
+                <MenuItem Header="Clear _Process Flow" Command="{Binding ClearProcessFlowCommand}"/>
+                <Separator/>
+                <MenuItem Header="_Theme">
+                    <MenuItem Header="_Dark Theme" Click="DarkTheme_Click" IsCheckable="True" x:Name="DarkThemeMenuItem" IsChecked="True"/>
+                    <MenuItem Header="_Light Theme" Click="LightTheme_Click" IsCheckable="True" x:Name="LightThemeMenuItem"/>
+                </MenuItem>
+            </MenuItem>
+            <MenuItem Header="_Help">
+                <MenuItem Header="_About" Click="About_Click"/>
+            </MenuItem>
+        </Menu>
+
+        <!-- Toolbar -->
+        <ToolBarTray Grid.Row="1" Background="{DynamicResource SurfaceBrush}">
+            <ToolBar Background="{DynamicResource SurfaceBrush}" Foreground="{DynamicResource ForegroundBrush}">
+                <Button Command="{Binding StartCommand}" ToolTip="Start Listening">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="&#x25B6;" Foreground="LimeGreen" FontSize="12" Margin="0,0,4,0"/>
+                        <TextBlock Text="Start"/>
+                    </StackPanel>
+                </Button>
+                <Button Command="{Binding StopCommand}" ToolTip="Stop Listening">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="&#x25A0;" Foreground="Red" FontSize="12" Margin="0,0,4,0"/>
+                        <TextBlock Text="Stop"/>
+                    </StackPanel>
+                </Button>
+                <Separator/>
+                <Button Command="{Binding ClearAllCommand}" ToolTip="Clear All">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="&#x1F5D1;" FontSize="12" Margin="0,0,4,0"/>
+                        <TextBlock Text="Clear"/>
+                    </StackPanel>
+                </Button>
+                <Separator/>
+                <TextBlock Text="Filter:" VerticalAlignment="Center" Margin="4,0"/>
+                <TextBox Width="200" Text="{Binding FilterText, UpdateSourceTrigger=PropertyChanged}"
+                         VerticalAlignment="Center"/>
+                <Separator/>
+                <TextBlock Text="Session:" VerticalAlignment="Center" Margin="4,0"/>
+                <ComboBox Width="150" ItemsSource="{Binding Sessions}"
+                          SelectedItem="{Binding SelectedSession}"
+                          DisplayMemberPath="Name"/>
+            </ToolBar>
+        </ToolBarTray>
+
+        <!-- Main Content -->
+        <Grid Grid.Row="2">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="2*"/>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+
+            <!-- Left Panel -->
+            <Grid Grid.Column="0">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="2*"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
+
+                <!-- Log Entries -->
+                <GroupBox Grid.Row="0" Header="Log Entries" Margin="4">
+                    <ListView ItemsSource="{Binding FilteredLogEntries}"
+                              SelectedItem="{Binding SelectedLogEntry}"
+                              VirtualizingPanel.IsVirtualizing="True"
+                              VirtualizingPanel.VirtualizationMode="Recycling"
+                              ScrollViewer.CanContentScroll="True">
+                        <ListView.View>
+                            <GridView>
+                                <GridViewColumn Header="" Width="30">
+                                    <GridViewColumn.CellTemplate>
+                                        <DataTemplate>
+                                            <TextBlock Text="{Binding LogEntryType, Converter={StaticResource LogEntryTypeToIconConverter}}"
+                                                       FontSize="14"/>
+                                        </DataTemplate>
+                                    </GridViewColumn.CellTemplate>
+                                </GridViewColumn>
+                                <GridViewColumn Header="Time" Width="90" DisplayMemberBinding="{Binding Timestamp, StringFormat=HH:mm:ss.fff}"/>
+                                <GridViewColumn Header="Session" Width="100" DisplayMemberBinding="{Binding SessionName}"/>
+                                <GridViewColumn Header="Title" Width="400" DisplayMemberBinding="{Binding Title}"/>
+                                <GridViewColumn Header="Thread" Width="60" DisplayMemberBinding="{Binding ThreadId}"/>
+                            </GridView>
+                        </ListView.View>
+                    </ListView>
+                </GroupBox>
+
+                <GridSplitter Grid.Row="1" Height="5" HorizontalAlignment="Stretch"
+                              Background="{DynamicResource BorderBrush}" ResizeDirection="Rows"/>
+
+                <!-- Watches -->
+                <GroupBox Grid.Row="2" Header="Watches" Margin="4">
+                    <ListView ItemsSource="{Binding Watches}"
+                              VirtualizingPanel.IsVirtualizing="True">
+                        <ListView.View>
+                            <GridView>
+                                <GridViewColumn Header="Name" Width="150" DisplayMemberBinding="{Binding Name}"/>
+                                <GridViewColumn Header="Value" Width="200" DisplayMemberBinding="{Binding Value}"/>
+                                <GridViewColumn Header="Type" Width="80" DisplayMemberBinding="{Binding WatchType}"/>
+                                <GridViewColumn Header="Time" Width="90" DisplayMemberBinding="{Binding Timestamp, StringFormat=HH:mm:ss.fff}"/>
+                            </GridView>
+                        </ListView.View>
+                    </ListView>
+                </GroupBox>
+
+                <GridSplitter Grid.Row="3" Height="5" HorizontalAlignment="Stretch"
+                              Background="{DynamicResource BorderBrush}" ResizeDirection="Rows"/>
+
+                <!-- Process Flow -->
+                <GroupBox Grid.Row="4" Header="Process Flow" Margin="4">
+                    <ListView ItemsSource="{Binding ProcessFlows}"
+                              VirtualizingPanel.IsVirtualizing="True">
+                        <ListView.View>
+                            <GridView>
+                                <GridViewColumn Header="Type" Width="100" DisplayMemberBinding="{Binding ProcessFlowType}"/>
+                                <GridViewColumn Header="Title" Width="250" DisplayMemberBinding="{Binding Title}"/>
+                                <GridViewColumn Header="Thread" Width="60" DisplayMemberBinding="{Binding ThreadId}"/>
+                                <GridViewColumn Header="Time" Width="90" DisplayMemberBinding="{Binding Timestamp, StringFormat=HH:mm:ss.fff}"/>
+                            </GridView>
+                        </ListView.View>
+                    </ListView>
+                </GroupBox>
+            </Grid>
+
+            <GridSplitter Grid.Column="1" Width="5" HorizontalAlignment="Center"
+                          VerticalAlignment="Stretch" Background="{DynamicResource BorderBrush}"/>
+
+            <!-- Right Panel - Details -->
+            <GroupBox Grid.Column="2" Header="Details" Margin="4">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <StackPanel Margin="8" DataContext="{Binding SelectedLogEntry}">
+                        <TextBlock Text="Title:" FontWeight="Bold" Margin="0,0,0,4"/>
+                        <TextBox Text="{Binding Title, Mode=OneWay}" IsReadOnly="True"
+                                 TextWrapping="Wrap" Margin="0,0,0,12"/>
+
+                        <TextBlock Text="Session:" FontWeight="Bold" Margin="0,0,0,4"/>
+                        <TextBox Text="{Binding SessionName, Mode=OneWay}" IsReadOnly="True"
+                                 Margin="0,0,0,12"/>
+
+                        <TextBlock Text="Timestamp:" FontWeight="Bold" Margin="0,0,0,4"/>
+                        <TextBox Text="{Binding Timestamp, Mode=OneWay, StringFormat=yyyy-MM-dd HH:mm:ss.fff}"
+                                 IsReadOnly="True" Margin="0,0,0,12"/>
+
+                        <TextBlock Text="Type:" FontWeight="Bold" Margin="0,0,0,4"/>
+                        <TextBox Text="{Binding LogEntryType, Mode=OneWay}" IsReadOnly="True"
+                                 Margin="0,0,0,12"/>
+
+                        <TextBlock Text="App:" FontWeight="Bold" Margin="0,0,0,4"/>
+                        <TextBox Text="{Binding AppName, Mode=OneWay}" IsReadOnly="True"
+                                 Margin="0,0,0,12"/>
+
+                        <TextBlock Text="Host:" FontWeight="Bold" Margin="0,0,0,4"/>
+                        <TextBox Text="{Binding HostName, Mode=OneWay}" IsReadOnly="True"
+                                 Margin="0,0,0,12"/>
+
+                        <TextBlock Text="Process/Thread:" FontWeight="Bold" Margin="0,0,0,4"/>
+                        <TextBox IsReadOnly="True" Margin="0,0,0,12">
+                            <TextBox.Text>
+                                <MultiBinding StringFormat="{}{0} / {1}">
+                                    <Binding Path="ProcessId"/>
+                                    <Binding Path="ThreadId"/>
+                                </MultiBinding>
+                            </TextBox.Text>
+                        </TextBox>
+
+                        <TextBlock Text="Data:" FontWeight="Bold" Margin="0,0,0,4"/>
+                        <TextBox Text="{Binding DataAsString, Mode=OneWay}" IsReadOnly="True"
+                                 TextWrapping="Wrap" AcceptsReturn="True"
+                                 MaxHeight="300" VerticalScrollBarVisibility="Auto"
+                                 FontFamily="Consolas"/>
+                    </StackPanel>
+                </ScrollViewer>
+            </GroupBox>
+        </Grid>
+
+        <!-- Status Bar -->
+        <StatusBar Grid.Row="3" Background="{DynamicResource SurfaceBrush}" Foreground="{DynamicResource ForegroundBrush}">
+            <StatusBarItem>
+                <TextBlock Text="{Binding StatusText}"/>
+            </StatusBarItem>
+            <Separator Background="{DynamicResource BorderBrush}"/>
+            <StatusBarItem>
+                <StackPanel Orientation="Horizontal">
+                    <Ellipse Width="10" Height="10" Margin="0,0,4,0">
+                        <Ellipse.Style>
+                            <Style TargetType="Ellipse">
+                                <Setter Property="Fill" Value="Gray"/>
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding IsListening}" Value="True">
+                                        <Setter Property="Fill" Value="LimeGreen"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Ellipse.Style>
+                    </Ellipse>
+                    <TextBlock>
+                        <TextBlock.Style>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="Foreground" Value="{DynamicResource ForegroundBrush}"/>
+                                <Setter Property="Text" Value="Stopped"/>
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding IsListening}" Value="True">
+                                        <Setter Property="Text" Value="Listening"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </TextBlock.Style>
+                    </TextBlock>
+                </StackPanel>
+            </StatusBarItem>
+            <Separator Background="{DynamicResource BorderBrush}"/>
+            <StatusBarItem>
+                <TextBlock Text="{Binding TcpStatus}"/>
+            </StatusBarItem>
+            <Separator Background="{DynamicResource BorderBrush}"/>
+            <StatusBarItem>
+                <TextBlock Text="{Binding PipeStatus}"/>
+            </StatusBarItem>
+            <Separator Background="{DynamicResource BorderBrush}"/>
+            <StatusBarItem>
+                <TextBlock Text="{Binding EntryCount, StringFormat=Entries: {0}}"/>
+            </StatusBarItem>
+        </StatusBar>
+    </Grid>
+</Window>
