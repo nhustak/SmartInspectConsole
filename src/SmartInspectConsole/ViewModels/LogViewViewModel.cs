@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using System.ComponentModel;
+using System.Text.RegularExpressions;
 using System.Windows.Data;
 using SmartInspectConsole.Core.Enums;
 using SmartInspectConsole.Core.Packets;
@@ -17,10 +18,31 @@ public class LogViewViewModel : ViewModelBase
     private string _name = "View";
     private string _appNameFilter = string.Empty;
     private string _sessionFilter = string.Empty;
+    private string _hostnameFilter = string.Empty;
+    private string _processIdFilter = string.Empty;
+    private string _threadIdFilter = string.Empty;
     private string _textFilter = string.Empty;
     private LogEntryType? _minLogLevel;
     private LogEntry? _selectedLogEntry;
     private bool _isSelected;
+
+    // Title matching
+    private bool _enableTitleMatching;
+    private string _titlePattern = string.Empty;
+    private bool _titleCaseSensitive;
+    private bool _titleIsRegex;
+    private bool _titleInvert;
+
+    // Log entry type visibility
+    private bool _showDebug = true;
+    private bool _showVerbose = true;
+    private bool _showMessage = true;
+    private bool _showWarning = true;
+    private bool _showError = true;
+    private bool _showFatal = true;
+    private bool _showMethodFlow = true;
+    private bool _showSeparator = true;
+    private bool _showOther = true;
 
     public LogViewViewModel(ObservableCollection<LogEntry> allLogEntries, object lockObject, string name = "View")
     {
@@ -79,6 +101,42 @@ public class LogViewViewModel : ViewModelBase
         }
     }
 
+    public string HostnameFilter
+    {
+        get => _hostnameFilter;
+        set
+        {
+            if (SetProperty(ref _hostnameFilter, value))
+            {
+                RefreshFilter();
+            }
+        }
+    }
+
+    public string ProcessIdFilter
+    {
+        get => _processIdFilter;
+        set
+        {
+            if (SetProperty(ref _processIdFilter, value))
+            {
+                RefreshFilter();
+            }
+        }
+    }
+
+    public string ThreadIdFilter
+    {
+        get => _threadIdFilter;
+        set
+        {
+            if (SetProperty(ref _threadIdFilter, value))
+            {
+                RefreshFilter();
+            }
+        }
+    }
+
     public string TextFilter
     {
         get => _textFilter;
@@ -118,6 +176,182 @@ public class LogViewViewModel : ViewModelBase
 
     public ObservableCollection<LogLevelOption> LogLevels { get; }
 
+    #region Title Matching
+
+    public bool EnableTitleMatching
+    {
+        get => _enableTitleMatching;
+        set
+        {
+            if (SetProperty(ref _enableTitleMatching, value))
+            {
+                RefreshFilter();
+            }
+        }
+    }
+
+    public string TitlePattern
+    {
+        get => _titlePattern;
+        set
+        {
+            if (SetProperty(ref _titlePattern, value))
+            {
+                RefreshFilter();
+            }
+        }
+    }
+
+    public bool TitleCaseSensitive
+    {
+        get => _titleCaseSensitive;
+        set
+        {
+            if (SetProperty(ref _titleCaseSensitive, value))
+            {
+                RefreshFilter();
+            }
+        }
+    }
+
+    public bool TitleIsRegex
+    {
+        get => _titleIsRegex;
+        set
+        {
+            if (SetProperty(ref _titleIsRegex, value))
+            {
+                RefreshFilter();
+            }
+        }
+    }
+
+    public bool TitleInvert
+    {
+        get => _titleInvert;
+        set
+        {
+            if (SetProperty(ref _titleInvert, value))
+            {
+                RefreshFilter();
+            }
+        }
+    }
+
+    #endregion
+
+    #region Log Entry Type Visibility
+
+    public bool ShowDebug
+    {
+        get => _showDebug;
+        set
+        {
+            if (SetProperty(ref _showDebug, value))
+            {
+                RefreshFilter();
+            }
+        }
+    }
+
+    public bool ShowVerbose
+    {
+        get => _showVerbose;
+        set
+        {
+            if (SetProperty(ref _showVerbose, value))
+            {
+                RefreshFilter();
+            }
+        }
+    }
+
+    public bool ShowMessage
+    {
+        get => _showMessage;
+        set
+        {
+            if (SetProperty(ref _showMessage, value))
+            {
+                RefreshFilter();
+            }
+        }
+    }
+
+    public bool ShowWarning
+    {
+        get => _showWarning;
+        set
+        {
+            if (SetProperty(ref _showWarning, value))
+            {
+                RefreshFilter();
+            }
+        }
+    }
+
+    public bool ShowError
+    {
+        get => _showError;
+        set
+        {
+            if (SetProperty(ref _showError, value))
+            {
+                RefreshFilter();
+            }
+        }
+    }
+
+    public bool ShowFatal
+    {
+        get => _showFatal;
+        set
+        {
+            if (SetProperty(ref _showFatal, value))
+            {
+                RefreshFilter();
+            }
+        }
+    }
+
+    public bool ShowMethodFlow
+    {
+        get => _showMethodFlow;
+        set
+        {
+            if (SetProperty(ref _showMethodFlow, value))
+            {
+                RefreshFilter();
+            }
+        }
+    }
+
+    public bool ShowSeparator
+    {
+        get => _showSeparator;
+        set
+        {
+            if (SetProperty(ref _showSeparator, value))
+            {
+                RefreshFilter();
+            }
+        }
+    }
+
+    public bool ShowOther
+    {
+        get => _showOther;
+        set
+        {
+            if (SetProperty(ref _showOther, value))
+            {
+                RefreshFilter();
+            }
+        }
+    }
+
+    #endregion
+
     public ICollectionView FilteredLogEntries { get; }
 
     public LogEntry? SelectedLogEntry
@@ -149,17 +383,37 @@ public class LogViewViewModel : ViewModelBase
         if (obj is not LogEntry entry)
             return false;
 
-        // App name filter
-        if (!string.IsNullOrWhiteSpace(AppNameFilter))
-        {
-            if (!entry.AppName.Contains(AppNameFilter, StringComparison.OrdinalIgnoreCase))
-                return false;
-        }
+        // Log entry type visibility filter
+        if (!PassesLogEntryTypeFilter(entry.LogEntryType))
+            return false;
 
-        // Session filter
-        if (!string.IsNullOrWhiteSpace(SessionFilter))
+        // App name filter (multi-value comma-separated)
+        if (!PassesMultiValueFilter(AppNameFilter, entry.AppName))
+            return false;
+
+        // Session filter (multi-value comma-separated)
+        if (!PassesMultiValueFilter(SessionFilter, entry.SessionName))
+            return false;
+
+        // Hostname filter (multi-value comma-separated)
+        if (!PassesMultiValueFilter(HostnameFilter, entry.HostName))
+            return false;
+
+        // Process ID filter (multi-value comma-separated)
+        if (!PassesMultiValueFilter(ProcessIdFilter, entry.ProcessId.ToString()))
+            return false;
+
+        // Thread ID filter (multi-value comma-separated)
+        if (!PassesMultiValueFilter(ThreadIdFilter, entry.ThreadId.ToString()))
+            return false;
+
+        // Title matching filter
+        if (EnableTitleMatching && !string.IsNullOrWhiteSpace(TitlePattern))
         {
-            if (!entry.SessionName.Contains(SessionFilter, StringComparison.OrdinalIgnoreCase))
+            bool matches = MatchesTitle(entry.Title);
+            if (TitleInvert)
+                matches = !matches;
+            if (!matches)
                 return false;
         }
 
@@ -172,7 +426,7 @@ public class LogViewViewModel : ViewModelBase
                 return false;
         }
 
-        // Log level filter
+        // Log level filter (legacy, still used for quick filtering)
         if (MinLogLevel.HasValue)
         {
             if (!PassesLogLevelFilter(entry.LogEntryType, MinLogLevel.Value))
@@ -180,6 +434,68 @@ public class LogViewViewModel : ViewModelBase
         }
 
         return true;
+    }
+
+    private bool PassesLogEntryTypeFilter(LogEntryType type)
+    {
+        return type switch
+        {
+            LogEntryType.Debug => ShowDebug,
+            LogEntryType.Verbose => ShowVerbose,
+            LogEntryType.Message => ShowMessage,
+            LogEntryType.Warning => ShowWarning,
+            LogEntryType.Error => ShowError,
+            LogEntryType.Fatal => ShowFatal,
+            LogEntryType.EnterMethod or LogEntryType.LeaveMethod => ShowMethodFlow,
+            LogEntryType.Separator => ShowSeparator,
+            _ => ShowOther
+        };
+    }
+
+    private static bool PassesMultiValueFilter(string filter, string value)
+    {
+        if (string.IsNullOrWhiteSpace(filter))
+            return true;
+
+        // Split by comma and check if any value matches
+        var filterValues = filter.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        if (filterValues.Length == 0)
+            return true;
+
+        foreach (var filterValue in filterValues)
+        {
+            if (value.Contains(filterValue, StringComparison.OrdinalIgnoreCase))
+                return true;
+        }
+
+        return false;
+    }
+
+    private bool MatchesTitle(string title)
+    {
+        if (string.IsNullOrWhiteSpace(TitlePattern))
+            return true;
+
+        try
+        {
+            if (TitleIsRegex)
+            {
+                var options = TitleCaseSensitive ? RegexOptions.None : RegexOptions.IgnoreCase;
+                return Regex.IsMatch(title, TitlePattern, options);
+            }
+            else
+            {
+                var comparison = TitleCaseSensitive
+                    ? StringComparison.Ordinal
+                    : StringComparison.OrdinalIgnoreCase;
+                return title.Contains(TitlePattern, comparison);
+            }
+        }
+        catch (ArgumentException)
+        {
+            // Invalid regex pattern - treat as no match
+            return false;
+        }
     }
 
     private static bool PassesLogLevelFilter(LogEntryType entryType, LogEntryType minLevel)

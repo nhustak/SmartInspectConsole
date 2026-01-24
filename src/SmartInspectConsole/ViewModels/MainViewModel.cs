@@ -7,6 +7,7 @@ using SmartInspectConsole.Core.Enums;
 using SmartInspectConsole.Core.Events;
 using SmartInspectConsole.Core.Listeners;
 using SmartInspectConsole.Core.Packets;
+using SmartInspectConsole.Views;
 
 namespace SmartInspectConsole.ViewModels;
 
@@ -70,6 +71,7 @@ public class MainViewModel : ViewModelBase, IDisposable
         RemoveViewCommand = new RelayCommand<LogViewViewModel>(RemoveView, CanRemoveView);
         RenameViewCommand = new RelayCommand<LogViewViewModel>(RenameView);
         DuplicateViewCommand = new RelayCommand<LogViewViewModel>(DuplicateView);
+        EditViewCommand = new RelayCommand<LogViewViewModel>(EditView);
     }
 
     #region Properties
@@ -144,6 +146,7 @@ public class MainViewModel : ViewModelBase, IDisposable
     public ICommand RemoveViewCommand { get; }
     public ICommand RenameViewCommand { get; }
     public ICommand DuplicateViewCommand { get; }
+    public ICommand EditViewCommand { get; }
 
     #endregion
 
@@ -246,6 +249,24 @@ public class MainViewModel : ViewModelBase, IDisposable
         };
         Views.Add(newView);
         SelectedView = newView;
+    }
+
+    private void EditView(LogViewViewModel? view)
+    {
+        if (view == null) return;
+
+        var editViewModel = new EditViewViewModel();
+        editViewModel.LoadFrom(view);
+
+        var dialog = new EditViewDialog(editViewModel)
+        {
+            Owner = Application.Current.MainWindow
+        };
+
+        if (dialog.ShowDialog() == true)
+        {
+            editViewModel.SaveTo(view);
+        }
     }
 
     #endregion

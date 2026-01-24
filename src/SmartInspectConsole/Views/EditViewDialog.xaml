@@ -1,0 +1,182 @@
+<Window x:Class="SmartInspectConsole.Views.EditViewDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        mc:Ignorable="d"
+        Title="Edit View"
+        Height="580" Width="500"
+        WindowStartupLocation="CenterOwner"
+        ResizeMode="NoResize"
+        ShowInTaskbar="False"
+        Background="{DynamicResource BackgroundBrush}"
+        Foreground="{DynamicResource ForegroundBrush}">
+
+    <Window.Resources>
+        <Style TargetType="TextBox">
+            <Setter Property="Background" Value="{DynamicResource BackgroundBrush}"/>
+            <Setter Property="Foreground" Value="{DynamicResource ForegroundBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}"/>
+            <Setter Property="Padding" Value="4,2"/>
+            <Setter Property="Margin" Value="0,2"/>
+        </Style>
+        <Style TargetType="CheckBox">
+            <Setter Property="Foreground" Value="{DynamicResource ForegroundBrush}"/>
+            <Setter Property="Margin" Value="0,2"/>
+        </Style>
+        <Style TargetType="Label">
+            <Setter Property="Foreground" Value="{DynamicResource ForegroundBrush}"/>
+            <Setter Property="Padding" Value="0,4"/>
+        </Style>
+        <Style TargetType="GroupBox">
+            <Setter Property="Foreground" Value="{DynamicResource ForegroundBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}"/>
+            <Setter Property="Margin" Value="0,0,0,8"/>
+            <Setter Property="Padding" Value="8"/>
+        </Style>
+        <Style TargetType="Button">
+            <Setter Property="Background" Value="{DynamicResource SurfaceBrush}"/>
+            <Setter Property="Foreground" Value="{DynamicResource ForegroundBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}"/>
+            <Setter Property="Padding" Value="16,6"/>
+            <Setter Property="Margin" Value="4,0"/>
+        </Style>
+    </Window.Resources>
+
+    <Grid Margin="16">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <!-- View Name -->
+        <GroupBox Grid.Row="0" Header="View Name">
+            <TextBox Text="{Binding ViewName, UpdateSourceTrigger=PropertyChanged}"
+                     ToolTip="Name displayed on the tab"/>
+        </GroupBox>
+
+        <!-- Data Filters -->
+        <GroupBox Grid.Row="1" Header="Data Filters">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+
+                <Label Grid.Row="0" Grid.Column="0" Content="Application:"/>
+                <TextBox Grid.Row="0" Grid.Column="1"
+                         Text="{Binding AppFilter, UpdateSourceTrigger=PropertyChanged}"
+                         ToolTip="Filter by app name. Use comma for multiple values (e.g., 'PaymentAPI, AuthService')"/>
+
+                <Label Grid.Row="1" Grid.Column="0" Content="Session:"/>
+                <TextBox Grid.Row="1" Grid.Column="1"
+                         Text="{Binding SessionFilter, UpdateSourceTrigger=PropertyChanged}"
+                         ToolTip="Filter by session name. Use comma for multiple values"/>
+
+                <Label Grid.Row="2" Grid.Column="0" Content="Hostname:"/>
+                <TextBox Grid.Row="2" Grid.Column="1"
+                         Text="{Binding HostnameFilter, UpdateSourceTrigger=PropertyChanged}"
+                         ToolTip="Filter by hostname. Use comma for multiple values"/>
+
+                <Label Grid.Row="3" Grid.Column="0" Content="Process ID:"/>
+                <TextBox Grid.Row="3" Grid.Column="1"
+                         Text="{Binding ProcessIdFilter, UpdateSourceTrigger=PropertyChanged}"
+                         ToolTip="Filter by process ID. Use comma for multiple values"/>
+
+                <Label Grid.Row="4" Grid.Column="0" Content="Thread ID:"/>
+                <TextBox Grid.Row="4" Grid.Column="1"
+                         Text="{Binding ThreadIdFilter, UpdateSourceTrigger=PropertyChanged}"
+                         ToolTip="Filter by thread ID. Use comma for multiple values"/>
+            </Grid>
+        </GroupBox>
+
+        <!-- Title Matching -->
+        <GroupBox Grid.Row="2" Header="Title Matching">
+            <StackPanel>
+                <CheckBox Content="Enable title matching"
+                          IsChecked="{Binding EnableTitleMatching}"/>
+
+                <Grid Margin="0,8,0,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+
+                    <Label Grid.Column="0" Content="Pattern:"/>
+                    <TextBox Grid.Column="1"
+                             Text="{Binding TitlePattern, UpdateSourceTrigger=PropertyChanged}"
+                             IsEnabled="{Binding EnableTitleMatching}"
+                             ToolTip="Pattern to match against log entry titles"/>
+                </Grid>
+
+                <WrapPanel Margin="0,8,0,0">
+                    <CheckBox Content="Case sensitive"
+                              IsChecked="{Binding TitleCaseSensitive}"
+                              IsEnabled="{Binding EnableTitleMatching}"
+                              Margin="0,0,16,0"/>
+                    <CheckBox Content="Regular expression"
+                              IsChecked="{Binding TitleIsRegex}"
+                              IsEnabled="{Binding EnableTitleMatching}"
+                              Margin="0,0,16,0"/>
+                    <CheckBox Content="Invert match"
+                              IsChecked="{Binding TitleInvert}"
+                              IsEnabled="{Binding EnableTitleMatching}"
+                              ToolTip="Show entries that DON'T match the pattern"/>
+                </WrapPanel>
+            </StackPanel>
+        </GroupBox>
+
+        <!-- Log Entry Types -->
+        <GroupBox Grid.Row="3" Header="Log Entry Types">
+            <StackPanel>
+                <WrapPanel>
+                    <CheckBox Content="Debug" IsChecked="{Binding ShowDebug}" Margin="0,0,16,4"/>
+                    <CheckBox Content="Verbose" IsChecked="{Binding ShowVerbose}" Margin="0,0,16,4"/>
+                    <CheckBox Content="Message" IsChecked="{Binding ShowMessage}" Margin="0,0,16,4"/>
+                    <CheckBox Content="Warning" IsChecked="{Binding ShowWarning}" Margin="0,0,16,4"/>
+                    <CheckBox Content="Error" IsChecked="{Binding ShowError}" Margin="0,0,16,4"/>
+                    <CheckBox Content="Fatal" IsChecked="{Binding ShowFatal}" Margin="0,0,16,4"/>
+                </WrapPanel>
+                <WrapPanel Margin="0,4,0,0">
+                    <CheckBox Content="Enter/Leave Method" IsChecked="{Binding ShowMethodFlow}" Margin="0,0,16,4"/>
+                    <CheckBox Content="Separator" IsChecked="{Binding ShowSeparator}" Margin="0,0,16,4"/>
+                    <CheckBox Content="Other" IsChecked="{Binding ShowOther}" Margin="0,0,16,4"/>
+                </WrapPanel>
+                <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                    <Button Content="Select All" Click="SelectAll_Click" Padding="8,4"/>
+                    <Button Content="Select None" Click="SelectNone_Click" Padding="8,4"/>
+                </StackPanel>
+            </StackPanel>
+        </GroupBox>
+
+        <!-- Info Text -->
+        <Border Grid.Row="4" Background="#FFFDE7" BorderBrush="#FFC107" BorderThickness="1"
+                Padding="8" Margin="0,0,0,8" CornerRadius="4">
+            <StackPanel Orientation="Horizontal">
+                <TextBlock Text="&#x2139;" FontSize="16" Foreground="#F57C00" Margin="0,0,8,0" VerticalAlignment="Top"/>
+                <TextBlock TextWrapping="Wrap" Foreground="#5D4037" FontSize="12">
+                    <Run FontWeight="Bold">Tip:</Run> Use commas to specify multiple values for data filters.
+                    <LineBreak/>
+                    Example: "PaymentAPI, AuthService, OrderService"
+                </TextBlock>
+            </StackPanel>
+        </Border>
+
+        <!-- Buttons -->
+        <StackPanel Grid.Row="5" Orientation="Horizontal" HorizontalAlignment="Right">
+            <Button Content="OK" IsDefault="True" Click="OK_Click"/>
+            <Button Content="Cancel" IsCancel="True" Click="Cancel_Click"/>
+        </StackPanel>
+    </Grid>
+</Window>
