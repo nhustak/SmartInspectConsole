@@ -7,6 +7,7 @@ using SmartInspectConsole.Core.Enums;
 using SmartInspectConsole.Core.Events;
 using SmartInspectConsole.Core.Listeners;
 using SmartInspectConsole.Core.Packets;
+using SmartInspectConsole.Services;
 using SmartInspectConsole.Views;
 
 namespace SmartInspectConsole.ViewModels;
@@ -549,6 +550,126 @@ public class MainViewModel : ViewModelBase, IDisposable
         {
             ProcessFlows.Clear();
         }
+    }
+
+    #endregion
+
+    #region State Management
+
+    /// <summary>
+    /// Captures the current view model state for saving.
+    /// </summary>
+    public void SaveStateTo(AppState state)
+    {
+        // Panel visibility
+        state.ShowWatchesPanel = ShowWatchesPanel;
+        state.ShowProcessFlowPanel = ShowProcessFlowPanel;
+        state.ShowDetailsPanel = ShowDetailsPanel;
+
+        // Views
+        state.Views.Clear();
+        foreach (var view in Views)
+        {
+            state.Views.Add(CaptureViewState(view));
+        }
+
+        // Selected view index
+        state.SelectedViewIndex = SelectedView != null ? Views.IndexOf(SelectedView) : 0;
+    }
+
+    /// <summary>
+    /// Restores view model state from saved state.
+    /// </summary>
+    public void RestoreStateFrom(AppState state)
+    {
+        // Panel visibility
+        ShowWatchesPanel = state.ShowWatchesPanel;
+        ShowProcessFlowPanel = state.ShowProcessFlowPanel;
+        ShowDetailsPanel = state.ShowDetailsPanel;
+
+        // Restore views if any saved
+        if (state.Views.Count > 0)
+        {
+            Views.Clear();
+            foreach (var viewState in state.Views)
+            {
+                var view = new LogViewViewModel(LogEntries, _logEntriesLock, viewState.Name);
+                ApplyViewState(view, viewState);
+                Views.Add(view);
+            }
+
+            // Restore selected view
+            var index = Math.Max(0, Math.Min(state.SelectedViewIndex, Views.Count - 1));
+            SelectedView = Views[index];
+
+            // Update view counter
+            _viewCounter = Views.Count;
+        }
+    }
+
+    private static ViewState CaptureViewState(LogViewViewModel view)
+    {
+        return new ViewState
+        {
+            Name = view.Name,
+            AppNameFilter = view.AppNameFilter,
+            SessionFilter = view.SessionFilter,
+            HostnameFilter = view.HostnameFilter,
+            ProcessIdFilter = view.ProcessIdFilter,
+            ThreadIdFilter = view.ThreadIdFilter,
+            TextFilter = view.TextFilter,
+            MinLogLevel = view.MinLogLevel?.ToString(),
+            EnableTitleMatching = view.EnableTitleMatching,
+            TitlePattern = view.TitlePattern,
+            TitleCaseSensitive = view.TitleCaseSensitive,
+            TitleIsRegex = view.TitleIsRegex,
+            TitleInvert = view.TitleInvert,
+            ShowDebug = view.ShowDebug,
+            ShowVerbose = view.ShowVerbose,
+            ShowMessage = view.ShowMessage,
+            ShowWarning = view.ShowWarning,
+            ShowError = view.ShowError,
+            ShowFatal = view.ShowFatal,
+            ShowMethodFlow = view.ShowMethodFlow,
+            ShowSeparator = view.ShowSeparator,
+            ShowOther = view.ShowOther
+        };
+    }
+
+    private static void ApplyViewState(LogViewViewModel view, ViewState state)
+    {
+        view.AppNameFilter = state.AppNameFilter ?? string.Empty;
+        view.SessionFilter = state.SessionFilter ?? string.Empty;
+        view.HostnameFilter = state.HostnameFilter ?? string.Empty;
+        view.ProcessIdFilter = state.ProcessIdFilter ?? string.Empty;
+        view.ThreadIdFilter = state.ThreadIdFilter ?? string.Empty;
+        view.TextFilter = state.TextFilter ?? string.Empty;
+
+        if (!string.IsNullOrEmpty(state.MinLogLevel) &&
+            Enum.TryParse<LogEntryType>(state.MinLogLevel, out var logLevel))
+        {
+            view.MinLogLevel = logLevel;
+            // Find and set the matching log level option
+            var option = view.LogLevels.FirstOrDefault(l => l.Value == logLevel);
+            if (option != null)
+                view.SelectedLogLevel = option;
+        }
+
+        view.EnableTitleMatching = state.EnableTitleMatching;
+        view.TitlePattern = state.TitlePattern ?? string.Empty;
+        view.TitleCaseSensitive = state.TitleCaseSensitive;
+        view.TitleIsRegex = state.TitleIsRegex;
+        view.TitleInvert = state.TitleInvert;
+
+        view.ShowDebug = state.ShowDebug;
+        view.ShowVerbose = state.ShowVerbose;
+        view.ShowMessage = state.ShowMessage;
+        view.ShowWarning = state.ShowWarning;
+        view.ShowError = state.ShowError;
+        view.ShowFatal = state.ShowFatal;
+        view.ShowMethodFlow = state.ShowMethodFlow;
+        view.ShowSeparator = state.ShowSeparator;
+        view.ShowOther = state.ShowOther;
     }
 
     #endregion

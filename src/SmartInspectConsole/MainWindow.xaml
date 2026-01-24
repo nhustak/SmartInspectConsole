@@ -157,7 +157,10 @@
         <!-- Menu -->
         <Menu Grid.Row="0" Background="{DynamicResource SurfaceBrush}" Foreground="{DynamicResource ForegroundBrush}">
             <MenuItem Header="_File">
-                <MenuItem Header="_Exit" Click="Exit_Click"/>
+                <MenuItem Header="_Export Layout..." Click="ExportLayout_Click"/>
+                <MenuItem Header="_Import Layout..." Click="ImportLayout_Click"/>
+                <Separator/>
+                <MenuItem Header="E_xit" Click="Exit_Click"/>
             </MenuItem>
             <MenuItem Header="_View">
                 <MenuItem Header="_Add View" Command="{Binding AddViewCommand}"/>
