@@ -66,6 +66,32 @@ public class LogEntry : Packet
     public Color Color { get; set; }
 
     /// <summary>
+    /// Gets or sets the elapsed time since the previous log entry.
+    /// </summary>
+    public TimeSpan ElapsedTime { get; set; }
+
+    /// <summary>
+    /// Gets the elapsed time formatted for display.
+    /// Shows milliseconds for short durations, seconds for longer ones.
+    /// </summary>
+    public string ElapsedTimeFormatted
+    {
+        get
+        {
+            if (ElapsedTime == TimeSpan.Zero)
+                return "-";
+
+            if (ElapsedTime.TotalMilliseconds < 1000)
+                return $"{ElapsedTime.TotalMilliseconds:F1}ms";
+
+            if (ElapsedTime.TotalSeconds < 60)
+                return $"{ElapsedTime.TotalSeconds:F2}s";
+
+            return ElapsedTime.ToString(@"mm\:ss\.fff");
+        }
+    }
+
+    /// <summary>
     /// Gets the data as a UTF-8 string if available.
     /// </summary>
     public string? DataAsString => Data != null ? System.Text.Encoding.UTF8.GetString(Data) : null;

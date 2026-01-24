@@ -20,10 +20,16 @@ public class MainViewModel : ViewModelBase, IDisposable
     private readonly SmartInspectPipeListener _pipeListener;
     private readonly object _logEntriesLock = new();
 
+    private DateTime? _lastLogEntryTimestamp;
     private string _statusText = "Ready";
     private bool _isListening;
     private LogViewViewModel? _selectedView;
     private int _viewCounter = 1;
+
+    // Panel visibility
+    private bool _showWatchesPanel = true;
+    private bool _showProcessFlowPanel = true;
+    private bool _showDetailsPanel = true;
 
     public MainViewModel()
     {
@@ -72,6 +78,11 @@ public class MainViewModel : ViewModelBase, IDisposable
         RenameViewCommand = new RelayCommand<LogViewViewModel>(RenameView);
         DuplicateViewCommand = new RelayCommand<LogViewViewModel>(DuplicateView);
         EditViewCommand = new RelayCommand<LogViewViewModel>(EditView);
+
+        // Panel visibility commands
+        HideWatchesPanelCommand = new RelayCommand(() => ShowWatchesPanel = false);
+        HideProcessFlowPanelCommand = new RelayCommand(() => ShowProcessFlowPanel = false);
+        HideDetailsPanelCommand = new RelayCommand(() => ShowDetailsPanel = false);
     }
 
     #region Properties
@@ -130,6 +141,25 @@ public class MainViewModel : ViewModelBase, IDisposable
 
     public int EntryCount => LogEntries.Count;
 
+    // Panel visibility
+    public bool ShowWatchesPanel
+    {
+        get => _showWatchesPanel;
+        set => SetProperty(ref _showWatchesPanel, value);
+    }
+
+    public bool ShowProcessFlowPanel
+    {
+        get => _showProcessFlowPanel;
+        set => SetProperty(ref _showProcessFlowPanel, value);
+    }
+
+    public bool ShowDetailsPanel
+    {
+        get => _showDetailsPanel;
+        set => SetProperty(ref _showDetailsPanel, value);
+    }
+
     #endregion
 
     #region Commands
@@ -147,6 +177,11 @@ public class MainViewModel : ViewModelBase, IDisposable
     public ICommand RenameViewCommand { get; }
     public ICommand DuplicateViewCommand { get; }
     public ICommand EditViewCommand { get; }
+
+    // Panel visibility
+    public ICommand HideWatchesPanelCommand { get; }
+    public ICommand HideProcessFlowPanelCommand { get; }
+    public ICommand HideDetailsPanelCommand { get; }
 
     #endregion
 
@@ -304,6 +339,13 @@ public class MainViewModel : ViewModelBase, IDisposable
 
     private void HandleLogEntry(LogEntry logEntry)
     {
+        // Calculate elapsed time since previous entry
+        if (_lastLogEntryTimestamp.HasValue)
+        {
+            logEntry.ElapsedTime = logEntry.Timestamp - _lastLogEntryTimestamp.Value;
+        }
+        _lastLogEntryTimestamp = logEntry.Timestamp;
+
         lock (_logEntriesLock)
         {
             LogEntries.Add(logEntry);
@@ -411,6 +453,8 @@ public class MainViewModel : ViewModelBase, IDisposable
 
     private void ClearLog()
     {
+        _lastLogEntryTimestamp = null;
+
         lock (_logEntriesLock)
         {
             LogEntries.Clear();

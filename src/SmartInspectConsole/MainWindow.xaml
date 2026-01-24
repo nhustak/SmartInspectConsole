@@ -17,6 +17,7 @@
         <conv:LogEntryTypeToIconConverter x:Key="LogEntryTypeToIconConverter"/>
         <conv:ColorToBrushConverter x:Key="ColorToBrushConverter"/>
         <conv:BoolToVisibilityConverter x:Key="BoolToVisibilityConverter"/>
+        <conv:BoolToGridLengthConverter x:Key="BoolToGridLengthConverter"/>
 
         <!-- Local styles that use DynamicResource for theme switching -->
         <Style TargetType="GroupBox">
@@ -168,6 +169,11 @@
                 <MenuItem Header="Clear _Watches" Command="{Binding ClearWatchesCommand}"/>
                 <MenuItem Header="Clear _Process Flow" Command="{Binding ClearProcessFlowCommand}"/>
                 <Separator/>
+                <MenuItem Header="_Panels">
+                    <MenuItem Header="_Watches" IsCheckable="True" IsChecked="{Binding ShowWatchesPanel}"/>
+                    <MenuItem Header="_Process Flow" IsCheckable="True" IsChecked="{Binding ShowProcessFlowPanel}"/>
+                    <MenuItem Header="_Details" IsCheckable="True" IsChecked="{Binding ShowDetailsPanel}"/>
+                </MenuItem>
                 <MenuItem Header="_Theme">
                     <MenuItem Header="_Dark Theme" Click="DarkTheme_Click" IsCheckable="True" x:Name="DarkThemeMenuItem" IsChecked="True"/>
                     <MenuItem Header="_Light Theme" Click="LightTheme_Click" IsCheckable="True" x:Name="LightThemeMenuItem"/>
@@ -221,7 +227,7 @@
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="2*"/>
                 <ColumnDefinition Width="Auto"/>
-                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="{Binding ShowDetailsPanel, Converter={StaticResource BoolToGridLengthConverter}}"/>
             </Grid.ColumnDefinitions>
 
             <!-- Left Panel -->
@@ -229,9 +235,9 @@
                 <Grid.RowDefinitions>
                     <RowDefinition Height="2*"/>
                     <RowDefinition Height="Auto"/>
-                    <RowDefinition Height="*"/>
+                    <RowDefinition Height="{Binding ShowWatchesPanel, Converter={StaticResource BoolToGridLengthConverter}}"/>
                     <RowDefinition Height="Auto"/>
-                    <RowDefinition Height="*"/>
+                    <RowDefinition Height="{Binding ShowProcessFlowPanel, Converter={StaticResource BoolToGridLengthConverter}}"/>
                 </Grid.RowDefinitions>
 
                 <!-- Log Entries with Tabbed Views -->
@@ -239,6 +245,23 @@
                             ItemsSource="{Binding Views}"
                             SelectedItem="{Binding SelectedView}"
                             Margin="4">
+                    <TabControl.ContextMenu>
+                        <ContextMenu>
+                            <MenuItem Header="Add View" Command="{Binding AddViewCommand}"/>
+                            <MenuItem Header="Edit View..." Command="{Binding EditViewCommand}" CommandParameter="{Binding SelectedView}"/>
+                            <MenuItem Header="Duplicate View" Command="{Binding DuplicateViewCommand}" CommandParameter="{Binding SelectedView}"/>
+                            <MenuItem Header="Remove View" Command="{Binding RemoveViewCommand}" CommandParameter="{Binding SelectedView}"/>
+                            <Separator/>
+                            <MenuItem Header="Clear Log" Command="{Binding ClearLogCommand}"/>
+                            <MenuItem Header="Clear All" Command="{Binding ClearAllCommand}"/>
+                            <Separator/>
+                            <MenuItem Header="Show Panels">
+                                <MenuItem Header="Watches" IsCheckable="True" IsChecked="{Binding ShowWatchesPanel}"/>
+                                <MenuItem Header="Process Flow" IsCheckable="True" IsChecked="{Binding ShowProcessFlowPanel}"/>
+                                <MenuItem Header="Details" IsCheckable="True" IsChecked="{Binding ShowDetailsPanel}"/>
+                            </MenuItem>
+                        </ContextMenu>
+                    </TabControl.ContextMenu>
                     <TabControl.ItemTemplate>
                         <DataTemplate>
                             <StackPanel Orientation="Horizontal">
@@ -329,6 +352,7 @@
                                                 </GridViewColumn.CellTemplate>
                                             </GridViewColumn>
                                             <GridViewColumn Header="Time" Width="90" DisplayMemberBinding="{Binding Timestamp, StringFormat=HH:mm:ss.fff}"/>
+                                            <GridViewColumn Header="Elapsed" Width="70" DisplayMemberBinding="{Binding ElapsedTimeFormatted}"/>
                                             <GridViewColumn Header="App" Width="100" DisplayMemberBinding="{Binding AppName}"/>
                                             <GridViewColumn Header="Session" Width="80" DisplayMemberBinding="{Binding SessionName}"/>
                                             <GridViewColumn Header="Title" Width="350" DisplayMemberBinding="{Binding Title}"/>
@@ -342,10 +366,19 @@
                 </TabControl>
 
                 <GridSplitter Grid.Row="1" Height="5" HorizontalAlignment="Stretch"
-                              Background="{DynamicResource BorderBrush}" ResizeDirection="Rows"/>
+                              Background="{DynamicResource BorderBrush}" ResizeDirection="Rows"
+                              Visibility="{Binding ShowWatchesPanel, Converter={StaticResource BoolToVisibilityConverter}}"/>
 
                 <!-- Watches -->
-                <GroupBox Grid.Row="2" Header="Watches" Margin="4">
+                <GroupBox Grid.Row="2" Header="Watches" Margin="4"
+                          Visibility="{Binding ShowWatchesPanel, Converter={StaticResource BoolToVisibilityConverter}}">
+                    <GroupBox.ContextMenu>
+                        <ContextMenu>
+                            <MenuItem Header="Clear Watches" Command="{Binding ClearWatchesCommand}"/>
+                            <Separator/>
+                            <MenuItem Header="Hide Panel" Command="{Binding HideWatchesPanelCommand}"/>
+                        </ContextMenu>
+                    </GroupBox.ContextMenu>
                     <ListView ItemsSource="{Binding Watches}"
                               VirtualizingPanel.IsVirtualizing="True">
                         <ListView.View>
@@ -360,10 +393,19 @@
                 </GroupBox>
 
                 <GridSplitter Grid.Row="3" Height="5" HorizontalAlignment="Stretch"
-                              Background="{DynamicResource BorderBrush}" ResizeDirection="Rows"/>
+                              Background="{DynamicResource BorderBrush}" ResizeDirection="Rows"
+                              Visibility="{Binding ShowProcessFlowPanel, Converter={StaticResource BoolToVisibilityConverter}}"/>
 
                 <!-- Process Flow -->
-                <GroupBox Grid.Row="4" Header="Process Flow" Margin="4">
+                <GroupBox Grid.Row="4" Header="Process Flow" Margin="4"
+                          Visibility="{Binding ShowProcessFlowPanel, Converter={StaticResource BoolToVisibilityConverter}}">
+                    <GroupBox.ContextMenu>
+                        <ContextMenu>
+                            <MenuItem Header="Clear Process Flow" Command="{Binding ClearProcessFlowCommand}"/>
+                            <Separator/>
+                            <MenuItem Header="Hide Panel" Command="{Binding HideProcessFlowPanelCommand}"/>
+                        </ContextMenu>
+                    </GroupBox.ContextMenu>
                     <ListView ItemsSource="{Binding ProcessFlows}"
                               VirtualizingPanel.IsVirtualizing="True">
                         <ListView.View>
@@ -379,10 +421,17 @@
             </Grid>
 
             <GridSplitter Grid.Column="1" Width="5" HorizontalAlignment="Center"
-                          VerticalAlignment="Stretch" Background="{DynamicResource BorderBrush}"/>
+                          VerticalAlignment="Stretch" Background="{DynamicResource BorderBrush}"
+                          Visibility="{Binding ShowDetailsPanel, Converter={StaticResource BoolToVisibilityConverter}}"/>
 
             <!-- Right Panel - Details -->
-            <GroupBox Grid.Column="2" Header="Details" Margin="4">
+            <GroupBox Grid.Column="2" Header="Details" Margin="4"
+                      Visibility="{Binding ShowDetailsPanel, Converter={StaticResource BoolToVisibilityConverter}}">
+                <GroupBox.ContextMenu>
+                    <ContextMenu>
+                        <MenuItem Header="Hide Panel" Command="{Binding HideDetailsPanelCommand}"/>
+                    </ContextMenu>
+                </GroupBox.ContextMenu>
                 <ScrollViewer VerticalScrollBarVisibility="Auto">
                     <StackPanel Margin="8" DataContext="{Binding SelectedView.SelectedLogEntry}">
                         <TextBlock Text="Title:" FontWeight="Bold" Margin="0,0,0,4"/>

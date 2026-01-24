@@ -1,5 +1,7 @@
 using System.Collections.Concurrent;
 using System.IO.Pipes;
+using System.Security.AccessControl;
+using System.Security.Principal;
 using System.Text;
 using SmartInspectConsole.Core.Enums;
 using SmartInspectConsole.Core.Events;
@@ -88,12 +90,22 @@ public class SmartInspectPipeListener : IPacketListener
 
             try
             {
-                pipeServer = new NamedPipeServerStream(
+                // Create pipe security that allows all users to connect
+                var pipeSecurity = new PipeSecurity();
+                pipeSecurity.AddAccessRule(new PipeAccessRule(
+                    new SecurityIdentifier(WellKnownSidType.WorldSid, null),
+                    PipeAccessRights.ReadWrite,
+                    AccessControlType.Allow));
+
+                pipeServer = NamedPipeServerStreamAcl.Create(
                     _pipeName,
                     PipeDirection.InOut,
                     MaxInstances,
                     PipeTransmissionMode.Byte,
-                    PipeOptions.Asynchronous);
+                    PipeOptions.Asynchronous,
+                    0, // inBufferSize (default)
+                    0, // outBufferSize (default)
+                    pipeSecurity);
 
                 await pipeServer.WaitForConnectionAsync(cancellationToken);
 
