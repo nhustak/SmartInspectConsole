@@ -1,6 +1,6 @@
 # SmartInspect Console
 
-**Version 2026.1.24.2**
+**Version 2026.1.25.0**
 
 A WPF-based replacement console for receiving and displaying real-time logging data from SmartInspectCore logging system.
 
@@ -29,10 +29,13 @@ SmartInspect Console is a replacement for the original Gurock SmartInspect Conso
 - **Real-time Logging**: Receive and display log entries as they arrive
 - **Multiple Protocols**: Listen on both TCP (port 4228) and Named Pipes simultaneously
 - **Multiple Views/Tabs**: Create multiple filtered views of the same log data
+- **Drag-and-Drop Tab Reordering**: Rearrange tabs by dragging them; order persists across sessions
 - **Session Filtering**: Filter log entries by session name
 - **Text Search**: Search through log entries by title or content
 - **Log Level Filtering**: Filter by minimum log level (Debug, Verbose, Message, Warning, Error, Fatal)
 - **Auto-Scroll**: Toggle auto-scroll to newest entries per view
+- **Clear View**: Clear only the current view's log entries (button on each tab's toolbar)
+- **Clear All**: Clear all log entries across all views (toolbar button)
 - **Watches Panel**: Monitor variable values in real-time
 - **Process Flow Panel**: Track method entry/exit and thread flow
 - **Control Commands**: Handle clear commands from clients

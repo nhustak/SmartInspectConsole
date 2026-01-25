@@ -266,7 +266,8 @@
                 <TabControl Grid.Row="0"
                             ItemsSource="{Binding Views}"
                             SelectedItem="{Binding SelectedView}"
-                            Margin="4">
+                            Margin="4"
+                            behaviors:TabReorderBehavior.EnableReorder="True">
                     <TabControl.ContextMenu>
                         <ContextMenu>
                             <MenuItem Header="Add View" Command="{Binding AddViewCommand}"/>
@@ -364,6 +365,18 @@
                                                 <TextBlock Text="Auto"/>
                                             </StackPanel>
                                         </ToggleButton>
+                                        <Button ToolTip="Clear this view's log entries"
+                                                Padding="8,4"
+                                                Margin="8,0,0,0"
+                                                Background="{DynamicResource SurfaceBrush}"
+                                                BorderBrush="{DynamicResource BorderBrush}"
+                                                Command="{Binding DataContext.ClearViewLogCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                CommandParameter="{Binding}">
+                                            <StackPanel Orientation="Horizontal">
+                                                <TextBlock Text="&#x2715;" FontSize="12" Margin="0,0,4,0"/>
+                                                <TextBlock Text="Clear"/>
+                                            </StackPanel>
+                                        </Button>
                                     </WrapPanel>
                                 </Border>
 
