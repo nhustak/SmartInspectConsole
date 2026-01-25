@@ -1,4 +1,4 @@
-import type { WebSocketConnection } from './WebSocketConnection';
+import type { IConnection } from './connections/IConnection';
 import type {
   LogEntryType,
   ViewerId,
@@ -13,7 +13,7 @@ import type {
  * A logging session that sends messages to SmartInspect Console
  */
 export class Session {
-  private connection: WebSocketConnection;
+  private connection: IConnection;
   private _name: string;
   private _appName: string;
   private _active: boolean = true;
@@ -21,11 +21,11 @@ export class Session {
 
   /**
    * Creates a new Session
-   * @param connection The WebSocket connection
+   * @param connection The connection (WebSocket or HTTP)
    * @param name Session name
    * @param appName Application name
    */
-  constructor(connection: WebSocketConnection, name: string, appName: string) {
+  constructor(connection: IConnection, name: string, appName: string) {
     this.connection = connection;
     this._name = name;
     this._appName = appName;

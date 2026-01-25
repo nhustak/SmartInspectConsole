@@ -1,9 +1,10 @@
-import type { Message, ConnectionState, SmartInspectEvents } from './types';
+import type { Message, ConnectionState, SmartInspectEvents } from '../types';
+import type { IConnection } from './IConnection';
 
 /**
  * Manages WebSocket connection to SmartInspect Console
  */
-export class WebSocketConnection {
+export class WebSocketConnection implements IConnection {
   private ws: WebSocket | null = null;
   private url: string = '';
   private state: ConnectionState = 'disconnected';

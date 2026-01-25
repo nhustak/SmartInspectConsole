@@ -123,22 +123,59 @@ export interface ControlCommandMessage {
 export type Message = LogEntryMessage | WatchMessage | ProcessFlowMessage | ControlCommandMessage;
 
 /**
+ * Connection type for SmartInspect
+ */
+export type ConnectionType = 'websocket' | 'http';
+
+/**
+ * HTTP connection options (when connectionType is 'http')
+ */
+export interface HttpOptions {
+  /** API key for authentication (optional) */
+  apiKey?: string;
+  /** Batch flush interval in milliseconds (default: 1000) */
+  flushInterval?: number;
+  /** Maximum batch size before forced flush (default: 50) */
+  maxBatchSize?: number;
+  /** Maximum buffer size when endpoint unavailable (default: 1000) */
+  maxBufferSize?: number;
+  /** Retry configuration */
+  retry?: {
+    maxAttempts?: number;
+    baseDelay?: number;
+    maxDelay?: number;
+  };
+  /** Enable gzip compression for large payloads (default: true) */
+  enableCompression?: boolean;
+  /** Minimum payload size for compression (default: 1024) */
+  compressionThreshold?: number;
+  /** Unique client identifier (auto-generated if not provided) */
+  clientId?: string;
+  /** Include page metadata in requests (default: true) */
+  includeMetadata?: boolean;
+}
+
+/**
  * Configuration options for SmartInspect
  */
 export interface SmartInspectOptions {
   /** Application name shown in console */
   appName?: string;
+  /** Connection type: 'websocket' (default) or 'http' */
+  connectionType?: ConnectionType;
+  /** HTTP connection options (when connectionType is 'http') */
+  httpOptions?: HttpOptions;
   /** Auto-connect on creation */
   autoConnect?: boolean;
-  /** Reconnect automatically on disconnect */
+  /** Reconnect automatically on disconnect (WebSocket only) */
   autoReconnect?: boolean;
-  /** Reconnect delay in milliseconds */
+  /** Reconnect delay in milliseconds (WebSocket only) */
   reconnectDelay?: number;
-  /** Maximum reconnect attempts (0 = unlimited) */
+  /** Maximum reconnect attempts, 0 = unlimited (WebSocket only) */
   maxReconnectAttempts?: number;
-  /** Enable buffering when disconnected */
+  /** Enable buffering when disconnected (WebSocket only) */
   bufferWhenDisconnected?: boolean;
-  /** Maximum buffer size */
+  /** Maximum buffer size (WebSocket only) */
   maxBufferSize?: number;
 }
 

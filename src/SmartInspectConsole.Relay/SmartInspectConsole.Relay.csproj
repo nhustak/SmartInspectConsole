@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Version>1.0.0</Version>
+    <AssemblyVersion>1.0.0.0</AssemblyVersion>
+    <FileVersion>1.0.0.0</FileVersion>
+    <Product>SmartInspect Console Relay</Product>
+    <Company>Nick Hustak</Company>
+    <Copyright>Copyright (c) 2026 Nick Hustak</Copyright>
+    <Description>HTTP relay for SmartInspect JS logging</Description>
+  </PropertyGroup>
+
+</Project>

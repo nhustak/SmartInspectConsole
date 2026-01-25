@@ -1,4 +1,4 @@
-import { WebSocketConnection } from './WebSocketConnection';
+import { WebSocketConnection, HttpConnection, type IConnection } from './connections';
 import { Session } from './Session';
 import type {
   SmartInspectOptions,
@@ -12,10 +12,11 @@ import type {
  * Main SmartInspect client class
  */
 export class SmartInspect {
-  private connection: WebSocketConnection;
+  private connection: IConnection;
   private sessions: Map<string, Session> = new Map();
   private _appName: string;
   private _enabled: boolean = true;
+  private _connectionType: 'websocket' | 'http';
 
   /**
    * Creates a new SmartInspect instance
@@ -24,25 +25,34 @@ export class SmartInspect {
    */
   constructor(appName: string, options?: SmartInspectOptions) {
     this._appName = appName || 'JavaScript App';
-    this.connection = new WebSocketConnection();
+    this._connectionType = options?.connectionType || 'websocket';
 
-    // Apply options
-    if (options) {
-      if (options.autoReconnect !== undefined) {
-        this.connection.autoReconnect = options.autoReconnect;
+    // Create appropriate connection based on type
+    if (this._connectionType === 'http') {
+      this.connection = new HttpConnection(options?.httpOptions);
+    } else {
+      const wsConnection = new WebSocketConnection();
+
+      // Apply WebSocket-specific options
+      if (options) {
+        if (options.autoReconnect !== undefined) {
+          wsConnection.autoReconnect = options.autoReconnect;
+        }
+        if (options.reconnectDelay !== undefined) {
+          wsConnection.reconnectDelay = options.reconnectDelay;
+        }
+        if (options.maxReconnectAttempts !== undefined) {
+          wsConnection.maxReconnectAttempts = options.maxReconnectAttempts;
+        }
+        if (options.bufferWhenDisconnected !== undefined) {
+          wsConnection.bufferWhenDisconnected = options.bufferWhenDisconnected;
+        }
+        if (options.maxBufferSize !== undefined) {
+          wsConnection.maxBufferSize = options.maxBufferSize;
+        }
       }
-      if (options.reconnectDelay !== undefined) {
-        this.connection.reconnectDelay = options.reconnectDelay;
-      }
-      if (options.maxReconnectAttempts !== undefined) {
-        this.connection.maxReconnectAttempts = options.maxReconnectAttempts;
-      }
-      if (options.bufferWhenDisconnected !== undefined) {
-        this.connection.bufferWhenDisconnected = options.bufferWhenDisconnected;
-      }
-      if (options.maxBufferSize !== undefined) {
-        this.connection.maxBufferSize = options.maxBufferSize;
-      }
+
+      this.connection = wsConnection;
     }
   }
 
@@ -73,6 +83,13 @@ export class SmartInspect {
   }
 
   /**
+   * Gets the connection type ('websocket' or 'http')
+   */
+  get connectionType(): 'websocket' | 'http' {
+    return this._connectionType;
+  }
+
+  /**
    * Gets the current connection state
    */
   get connectionState(): ConnectionState {
@@ -94,15 +111,20 @@ export class SmartInspect {
   }
 
   /**
-   * Connect to SmartInspect Console
-   * @param url WebSocket URL (default: ws://localhost:4229)
+   * Connect to SmartInspect Console or Relay
+   * @param url Connection URL
+   *   - WebSocket: 'ws://localhost:4229' (default)
+   *   - HTTP: 'https://logs.example.com/api/v1'
    */
-  async connect(url: string = 'ws://localhost:4229'): Promise<void> {
-    return this.connection.connect(url);
+  async connect(url?: string): Promise<void> {
+    const defaultUrl = this._connectionType === 'http'
+      ? 'http://localhost:5000/api/v1'
+      : 'ws://localhost:4229';
+    return this.connection.connect(url || defaultUrl);
   }
 
   /**
-   * Disconnect from SmartInspect Console
+   * Disconnect from SmartInspect Console or Relay
    */
   disconnect(): void {
     this.connection.disconnect();

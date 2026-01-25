@@ -1,0 +1,6 @@
+@SmartInspectConsole.Relay_HostAddress = http://localhost:5109
+
+GET {{SmartInspectConsole.Relay_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###

@@ -1,7 +1,7 @@
 /**
  * SmartInspect JS - Browser logging client for SmartInspect Console
  *
- * @example Quick Start
+ * @example Quick Start (WebSocket - Development)
  * ```typescript
  * import { SiAuto } from 'smartinspect-js';
  *
@@ -23,6 +23,24 @@
  * SiAuto.main.enterMethod('handleClick');
  * // ... do work ...
  * SiAuto.main.leaveMethod('handleClick');
+ * ```
+ *
+ * @example HTTP Relay (Production)
+ * ```typescript
+ * import { SmartInspect } from 'smartinspect-js';
+ *
+ * const si = new SmartInspect('MyApp', {
+ *   connectionType: 'http',
+ *   httpOptions: {
+ *     endpoint: 'https://logs.example.com/api/v1',
+ *     apiKey: 'your-api-key',
+ *     flushInterval: 2000,
+ *     maxBatchSize: 100
+ *   }
+ * });
+ *
+ * await si.connect();
+ * si.mainSession.logMessage('Hello from production!');
  * ```
  *
  * @example Multiple Sessions
@@ -47,7 +65,17 @@
 // Main classes
 export { SmartInspect, SiAuto } from './SmartInspect';
 export { Session } from './Session';
-export { WebSocketConnection } from './WebSocketConnection';
+
+// Connection classes
+export {
+  type IConnection,
+  WebSocketConnection,
+  HttpConnection,
+  type HttpConnectionOptions
+} from './connections';
+
+// Re-export WebSocketConnection from root for backwards compatibility
+export { WebSocketConnection as default } from './connections';
 
 // Types
 export type {
@@ -57,6 +85,8 @@ export type {
   ProcessFlowType,
   ControlCommandType,
   ConnectionState,
+  ConnectionType,
+  HttpOptions,
   LogEntryMessage,
   WatchMessage,
   ProcessFlowMessage,

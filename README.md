@@ -71,6 +71,17 @@ SmartInspect Console is a replacement for the original Gurock SmartInspect Conso
 ```
 SmartInspectConsole/
 ├── SmartInspectConsole.sln
+├── smartinspect-js/                      # Browser logging library
+│   ├── src/
+│   │   ├── connections/                  # Connection transports
+│   │   │   ├── IConnection.ts           # Connection interface
+│   │   │   ├── WebSocketConnection.ts   # WebSocket transport
+│   │   │   └── HttpConnection.ts        # HTTP POST transport
+│   │   ├── SmartInspect.ts              # Main client class
+│   │   ├── Session.ts                   # Logging session
+│   │   └── types.ts                     # TypeScript types
+│   └── dist/                            # Built bundles
+│
 └── src/
     ├── SmartInspectConsole/              # WPF Application
     │   ├── Behaviors/                    # Attached behaviors (AutoScroll)
@@ -80,12 +91,18 @@ SmartInspectConsole/
     │   ├── ViewModels/                   # MVVM view models
     │   └── Views/                        # XAML views and dialogs
     │
-    └── SmartInspectConsole.Core/         # Protocol Library
-        ├── Enums/                        # Protocol enumerations
-        ├── Events/                       # Event argument classes
-        ├── Listeners/                    # TCP and Pipe listeners
-        ├── Packets/                      # Packet data classes
-        └── Parsing/                      # Binary packet parser
+    ├── SmartInspectConsole.Core/         # Protocol Library
+    │   ├── Enums/                        # Protocol enumerations
+    │   ├── Events/                       # Event argument classes
+    │   ├── Listeners/                    # TCP and Pipe listeners
+    │   ├── Packets/                      # Packet data classes
+    │   └── Parsing/                      # Binary packet parser
+    │
+    └── SmartInspectConsole.Relay/        # HTTP Relay Service
+        ├── Program.cs                    # Minimal API endpoints
+        ├── Services/
+        │   └── ConsoleForwarder.cs       # WebSocket client to console
+        └── appsettings.json              # Configuration
 ```
 
 ## Building
@@ -134,7 +151,7 @@ si.Connections = "mem(maxsize=2048, astext=true), " +
 
 **Note: This only works with this new console - not the original Gurock SmartInspect Console.**
 
-The `smartinspect-js` library allows browser-based JavaScript and TypeScript applications to send logs to the SmartInspect Console via WebSocket (port 4229).
+The `smartinspect-js` library allows browser-based JavaScript and TypeScript applications to send logs to the SmartInspect Console via WebSocket (port 4229) or HTTP POST (via the relay service).
 
 ### Installation
 
@@ -180,6 +197,36 @@ session.watch('counter', 42);
 session.watch('status', 'active');
 ```
 
+### HTTP Mode (Production)
+
+For production environments where WebSockets may be blocked by firewalls or proxies, use HTTP mode with the SmartInspect Relay service:
+
+```typescript
+import { SmartInspect } from 'smartinspect-js';
+
+// HTTP mode with batching
+const si = new SmartInspect('My Production App', {
+  connectionType: 'http',
+  httpOptions: {
+    endpoint: 'https://logs.example.com/api/v1/logs',
+    apiKey: 'optional-api-key',
+    flushInterval: 2000,     // Flush every 2 seconds
+    maxBatchSize: 100,       // Or when 100 messages accumulate
+    compression: true        // Gzip compress large batches
+  }
+});
+
+await si.connect();
+si.mainSession.logMessage('Hello from production!');
+```
+
+**HTTP Mode Features:**
+- Message batching with configurable interval and batch size
+- Priority flush for error/fatal messages (sent immediately)
+- Automatic page unload handling via `navigator.sendBeacon()`
+- Exponential backoff retry on failures
+- Optional gzip compression for large payloads
+
 ### Features
 
 - WebSocket-based communication (no CORS issues with localhost)
@@ -192,6 +239,75 @@ session.watch('status', 'active');
 ### Console Configuration
 
 The console listens on WebSocket port 4229 by default. This can be changed in Settings (File > Settings).
+
+## SmartInspect Relay (HTTP Gateway)
+
+The SmartInspect Relay is an ASP.NET Core service that accepts HTTP POST requests from browsers and forwards them to the SmartInspect Console via WebSocket. Use this for production environments where:
+
+- WebSockets may be blocked by corporate firewalls or proxies
+- The console is on a different network than the browser
+- Serverless/cloud deployments can't maintain persistent connections
+
+### Architecture
+
+```
+┌─────────────────────┐     HTTPS POST      ┌─────────────────────┐
+│   Browser App       │ ─────────────────── │   Relay Service     │
+│   (smartinspect-js) │     (JSON batch)    │   (ASP.NET Core)    │
+└─────────────────────┘                     └─────────────────────┘
+                                                      │
+                                                      │ WebSocket
+                                                      ▼
+                                            ┌─────────────────────┐
+                                            │ SmartInspect Console│
+                                            └─────────────────────┘
+```
+
+### Running the Relay
+
+```bash
+cd src/SmartInspectConsole.Relay
+dotnet run
+```
+
+The relay starts on `http://localhost:5000` by default.
+
+### API Endpoints
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/v1/logs` | POST | Accept single message or batch |
+| `/api/v1/health` | GET | Health check |
+| `/api/v1/status` | GET | Connection status and statistics |
+
+### Configuration (appsettings.json)
+
+```json
+{
+  "Relay": {
+    "ConsoleHost": "localhost",
+    "ConsolePort": 4229,
+    "BufferSize": 10000,
+    "ReconnectDelayMs": 5000,
+    "MaxReconnectAttempts": 0,
+    "RateLimit": {
+      "RequestsPerMinute": 1000,
+      "BurstSize": 100
+    },
+    "ApiKeys": {
+      "Enabled": false,
+      "Keys": []
+    }
+  }
+}
+```
+
+### Features
+
+- **Message Buffering**: Queues up to 10,000 messages when console is unavailable
+- **Auto-Reconnect**: Automatically reconnects to console with exponential backoff
+- **Request Decompression**: Accepts gzipped request bodies
+- **CORS Support**: Configured for cross-origin requests
 
 ## Protocol Compatibility
 
@@ -240,7 +356,6 @@ The console is fully compatible with SmartInspectCore's binary protocol:
 - [ ] Statistics/metrics dashboard
 - [ ] Log file watching (tail -f style)
 - [ ] Email digest feature (zip and send logs on schedule or immediately on errors for unattended operation)
-- [ ] WebAPI relay endpoint for production JS logging (HTTP POST alternative to WebSocket)
 - [ ] File logging with per-view settings (continuous audit logs with rotation, max files, size limits)
 
 ## Requirements
