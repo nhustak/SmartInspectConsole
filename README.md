@@ -239,6 +239,9 @@ The console is fully compatible with SmartInspectCore's binary protocol:
 - [ ] Memory buffer retrieval from crashed applications
 - [ ] Statistics/metrics dashboard
 - [ ] Log file watching (tail -f style)
+- [ ] Email digest feature (zip and send logs on schedule or immediately on errors for unattended operation)
+- [ ] WebAPI relay endpoint for production JS logging (HTTP POST alternative to WebSocket)
+- [ ] File logging with per-view settings (continuous audit logs with rotation, max files, size limits)
 
 ## Requirements
 
