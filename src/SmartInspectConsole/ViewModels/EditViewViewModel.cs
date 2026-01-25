@@ -1,4 +1,22 @@
+using System.Collections.ObjectModel;
+
 namespace SmartInspectConsole.ViewModels;
+
+/// <summary>
+/// Represents a selectable filter option.
+/// </summary>
+public class FilterOption : ViewModelBase
+{
+    private bool _isSelected;
+
+    public string Value { get; set; } = string.Empty;
+
+    public bool IsSelected
+    {
+        get => _isSelected;
+        set => SetProperty(ref _isSelected, value);
+    }
+}
 
 /// <summary>
 /// View model for the Edit View dialog.
@@ -11,6 +29,11 @@ public class EditViewViewModel : ViewModelBase
     private string _hostnameFilter = string.Empty;
     private string _processIdFilter = string.Empty;
     private string _threadIdFilter = string.Empty;
+
+    // Available filter options
+    public ObservableCollection<FilterOption> AvailableAppNames { get; } = new();
+    public ObservableCollection<FilterOption> AvailableSessions { get; } = new();
+    public ObservableCollection<FilterOption> AvailableHostnames { get; } = new();
 
     private bool _enableTitleMatching;
     private string _titlePattern = string.Empty;
@@ -27,6 +50,14 @@ public class EditViewViewModel : ViewModelBase
     private bool _showMethodFlow = true;
     private bool _showSeparator = true;
     private bool _showOther = true;
+
+    // Column visibility
+    private bool _showTimeColumn = true;
+    private bool _showElapsedColumn = true;
+    private bool _showAppColumn = true;
+    private bool _showSessionColumn = true;
+    private bool _showTitleColumn = true;
+    private bool _showThreadColumn = true;
 
     #region View Name
 
@@ -162,6 +193,50 @@ public class EditViewViewModel : ViewModelBase
         set => SetProperty(ref _showOther, value);
     }
 
+    #endregion
+
+    #region Column Visibility
+
+    public bool ShowTimeColumn
+    {
+        get => _showTimeColumn;
+        set => SetProperty(ref _showTimeColumn, value);
+    }
+
+    public bool ShowElapsedColumn
+    {
+        get => _showElapsedColumn;
+        set => SetProperty(ref _showElapsedColumn, value);
+    }
+
+    public bool ShowAppColumn
+    {
+        get => _showAppColumn;
+        set => SetProperty(ref _showAppColumn, value);
+    }
+
+    public bool ShowSessionColumn
+    {
+        get => _showSessionColumn;
+        set => SetProperty(ref _showSessionColumn, value);
+    }
+
+    public bool ShowTitleColumn
+    {
+        get => _showTitleColumn;
+        set => SetProperty(ref _showTitleColumn, value);
+    }
+
+    public bool ShowThreadColumn
+    {
+        get => _showThreadColumn;
+        set => SetProperty(ref _showThreadColumn, value);
+    }
+
+    #endregion
+
+    #region Log Entry Type Helpers
+
     public void SelectAllLogTypes()
     {
         ShowDebug = true;
@@ -186,6 +261,89 @@ public class EditViewViewModel : ViewModelBase
         ShowMethodFlow = false;
         ShowSeparator = false;
         ShowOther = false;
+    }
+
+    #endregion
+
+    #region Available Values
+
+    /// <summary>
+    /// Sets the available filter values from the main view model.
+    /// </summary>
+    public void SetAvailableValues(
+        IEnumerable<string> appNames,
+        IEnumerable<string> sessions,
+        IEnumerable<string> hostnames)
+    {
+        AvailableAppNames.Clear();
+        foreach (var name in appNames.OrderBy(n => n))
+        {
+            AvailableAppNames.Add(new FilterOption { Value = name });
+        }
+
+        AvailableSessions.Clear();
+        foreach (var name in sessions.OrderBy(n => n))
+        {
+            AvailableSessions.Add(new FilterOption { Value = name });
+        }
+
+        AvailableHostnames.Clear();
+        foreach (var name in hostnames.OrderBy(n => n))
+        {
+            AvailableHostnames.Add(new FilterOption { Value = name });
+        }
+    }
+
+    /// <summary>
+    /// Updates available options selection state based on filter string.
+    /// </summary>
+    private void UpdateSelectionFromFilter(ObservableCollection<FilterOption> options, string filter)
+    {
+        var filterValues = string.IsNullOrWhiteSpace(filter)
+            ? Array.Empty<string>()
+            : filter.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+
+        foreach (var option in options)
+        {
+            option.IsSelected = filterValues.Any(f =>
+                f.Equals(option.Value, StringComparison.OrdinalIgnoreCase));
+        }
+    }
+
+    /// <summary>
+    /// Builds a filter string from selected options.
+    /// </summary>
+    private static string BuildFilterFromSelection(ObservableCollection<FilterOption> options)
+    {
+        var selected = options.Where(o => o.IsSelected).Select(o => o.Value);
+        return string.Join(", ", selected);
+    }
+
+    /// <summary>
+    /// Toggles selection of an app filter option.
+    /// </summary>
+    public void ToggleAppSelection(FilterOption option)
+    {
+        option.IsSelected = !option.IsSelected;
+        AppFilter = BuildFilterFromSelection(AvailableAppNames);
+    }
+
+    /// <summary>
+    /// Toggles selection of a session filter option.
+    /// </summary>
+    public void ToggleSessionSelection(FilterOption option)
+    {
+        option.IsSelected = !option.IsSelected;
+        SessionFilter = BuildFilterFromSelection(AvailableSessions);
+    }
+
+    /// <summary>
+    /// Toggles selection of a hostname filter option.
+    /// </summary>
+    public void ToggleHostnameSelection(FilterOption option)
+    {
+        option.IsSelected = !option.IsSelected;
+        HostnameFilter = BuildFilterFromSelection(AvailableHostnames);
     }
 
     #endregion
@@ -216,6 +374,24 @@ public class EditViewViewModel : ViewModelBase
         ShowMethodFlow = view.ShowMethodFlow;
         ShowSeparator = view.ShowSeparator;
         ShowOther = view.ShowOther;
+
+        ShowTimeColumn = view.ShowTimeColumn;
+        ShowElapsedColumn = view.ShowElapsedColumn;
+        ShowAppColumn = view.ShowAppColumn;
+        ShowSessionColumn = view.ShowSessionColumn;
+        ShowTitleColumn = view.ShowTitleColumn;
+        ShowThreadColumn = view.ShowThreadColumn;
+    }
+
+    /// <summary>
+    /// Updates selection states after available values are set.
+    /// Call this after both LoadFrom and SetAvailableValues have been called.
+    /// </summary>
+    public void SyncSelectionStates()
+    {
+        UpdateSelectionFromFilter(AvailableAppNames, AppFilter);
+        UpdateSelectionFromFilter(AvailableSessions, SessionFilter);
+        UpdateSelectionFromFilter(AvailableHostnames, HostnameFilter);
     }
 
     public void SaveTo(LogViewViewModel view)
@@ -242,6 +418,13 @@ public class EditViewViewModel : ViewModelBase
         view.ShowMethodFlow = ShowMethodFlow;
         view.ShowSeparator = ShowSeparator;
         view.ShowOther = ShowOther;
+
+        view.ShowTimeColumn = ShowTimeColumn;
+        view.ShowElapsedColumn = ShowElapsedColumn;
+        view.ShowAppColumn = ShowAppColumn;
+        view.ShowSessionColumn = ShowSessionColumn;
+        view.ShowTitleColumn = ShowTitleColumn;
+        view.ShowThreadColumn = ShowThreadColumn;
 
         view.RefreshFilter();
     }

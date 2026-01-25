@@ -101,6 +101,11 @@ public class MainViewModel : ViewModelBase, IDisposable
     public ObservableCollection<LogViewViewModel> Views { get; }
     public ObservableCollection<LogEntryDetailViewModel> DetailTabs { get; }
 
+    // Available filter values (populated from received log entries)
+    public ObservableCollection<string> AvailableAppNames { get; } = new();
+    public ObservableCollection<string> AvailableSessions { get; } = new();
+    public ObservableCollection<string> AvailableHostnames { get; } = new();
+
     public LogEntryDetailViewModel? SelectedDetailTab
     {
         get => _selectedDetailTab;
@@ -313,6 +318,8 @@ public class MainViewModel : ViewModelBase, IDisposable
 
         var editViewModel = new EditViewViewModel();
         editViewModel.LoadFrom(view);
+        editViewModel.SetAvailableValues(AvailableAppNames, AvailableSessions, AvailableHostnames);
+        editViewModel.SyncSelectionStates();
 
         var dialog = new EditViewDialog(editViewModel)
         {
@@ -416,6 +423,9 @@ public class MainViewModel : ViewModelBase, IDisposable
             LogEntries.Add(logEntry);
         }
 
+        // Track available filter values
+        TrackAvailableFilterValues(logEntry);
+
         // Notify all views to update their filtered counts
         foreach (var view in Views)
         {
@@ -423,6 +433,30 @@ public class MainViewModel : ViewModelBase, IDisposable
         }
 
         OnPropertyChanged(nameof(EntryCount));
+    }
+
+    private void TrackAvailableFilterValues(LogEntry logEntry)
+    {
+        // Track app names
+        if (!string.IsNullOrWhiteSpace(logEntry.AppName) &&
+            !AvailableAppNames.Contains(logEntry.AppName))
+        {
+            AvailableAppNames.Add(logEntry.AppName);
+        }
+
+        // Track session names
+        if (!string.IsNullOrWhiteSpace(logEntry.SessionName) &&
+            !AvailableSessions.Contains(logEntry.SessionName))
+        {
+            AvailableSessions.Add(logEntry.SessionName);
+        }
+
+        // Track hostnames
+        if (!string.IsNullOrWhiteSpace(logEntry.HostName) &&
+            !AvailableHostnames.Contains(logEntry.HostName))
+        {
+            AvailableHostnames.Add(logEntry.HostName);
+        }
     }
 
     private void HandleWatch(Watch watch)
@@ -525,6 +559,11 @@ public class MainViewModel : ViewModelBase, IDisposable
             LogEntries.Clear();
             DetailTabs.Clear();
         }
+
+        // Clear available filter values
+        AvailableAppNames.Clear();
+        AvailableSessions.Clear();
+        AvailableHostnames.Clear();
 
         foreach (var view in Views)
         {
@@ -632,7 +671,13 @@ public class MainViewModel : ViewModelBase, IDisposable
             ShowFatal = view.ShowFatal,
             ShowMethodFlow = view.ShowMethodFlow,
             ShowSeparator = view.ShowSeparator,
-            ShowOther = view.ShowOther
+            ShowOther = view.ShowOther,
+            ShowTimeColumn = view.ShowTimeColumn,
+            ShowElapsedColumn = view.ShowElapsedColumn,
+            ShowAppColumn = view.ShowAppColumn,
+            ShowSessionColumn = view.ShowSessionColumn,
+            ShowTitleColumn = view.ShowTitleColumn,
+            ShowThreadColumn = view.ShowThreadColumn
         };
     }
 
@@ -670,6 +715,13 @@ public class MainViewModel : ViewModelBase, IDisposable
         view.ShowMethodFlow = state.ShowMethodFlow;
         view.ShowSeparator = state.ShowSeparator;
         view.ShowOther = state.ShowOther;
+
+        view.ShowTimeColumn = state.ShowTimeColumn;
+        view.ShowElapsedColumn = state.ShowElapsedColumn;
+        view.ShowAppColumn = state.ShowAppColumn;
+        view.ShowSessionColumn = state.ShowSessionColumn;
+        view.ShowTitleColumn = state.ShowTitleColumn;
+        view.ShowThreadColumn = state.ShowThreadColumn;
     }
 
     #endregion

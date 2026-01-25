@@ -4,6 +4,13 @@
     <TargetFramework>net9.0-windows</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+    <Version>2026.1.24.0</Version>
+    <AssemblyVersion>2026.1.24.0</AssemblyVersion>
+    <FileVersion>2026.1.24.0</FileVersion>
+    <Product>SmartInspect Console Core</Product>
+    <Company>Nick Hustak</Company>
+    <Copyright>Copyright (c) 2026 Nick Hustak</Copyright>
+    <Description>Protocol library for SmartInspect Console</Description>
   </PropertyGroup>
 
   <ItemGroup>

@@ -44,6 +44,14 @@ public class LogViewViewModel : ViewModelBase
     private bool _showSeparator = true;
     private bool _showOther = true;
 
+    // Column visibility
+    private bool _showTimeColumn = true;
+    private bool _showElapsedColumn = true;
+    private bool _showAppColumn = true;
+    private bool _showSessionColumn = true;
+    private bool _showTitleColumn = true;
+    private bool _showThreadColumn = true;
+
     public LogViewViewModel(ObservableCollection<LogEntry> allLogEntries, object lockObject, string name = "View")
     {
         _allLogEntries = allLogEntries;
@@ -348,6 +356,46 @@ public class LogViewViewModel : ViewModelBase
                 RefreshFilter();
             }
         }
+    }
+
+    #endregion
+
+    #region Column Visibility
+
+    public bool ShowTimeColumn
+    {
+        get => _showTimeColumn;
+        set => SetProperty(ref _showTimeColumn, value);
+    }
+
+    public bool ShowElapsedColumn
+    {
+        get => _showElapsedColumn;
+        set => SetProperty(ref _showElapsedColumn, value);
+    }
+
+    public bool ShowAppColumn
+    {
+        get => _showAppColumn;
+        set => SetProperty(ref _showAppColumn, value);
+    }
+
+    public bool ShowSessionColumn
+    {
+        get => _showSessionColumn;
+        set => SetProperty(ref _showSessionColumn, value);
+    }
+
+    public bool ShowTitleColumn
+    {
+        get => _showTitleColumn;
+        set => SetProperty(ref _showTitleColumn, value);
+    }
+
+    public bool ShowThreadColumn
+    {
+        get => _showThreadColumn;
+        set => SetProperty(ref _showThreadColumn, value);
     }
 
     #endregion

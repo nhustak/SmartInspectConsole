@@ -199,4 +199,12 @@ public class ViewState
     public bool ShowMethodFlow { get; set; } = true;
     public bool ShowSeparator { get; set; } = true;
     public bool ShowOther { get; set; } = true;
+
+    // Column visibility
+    public bool ShowTimeColumn { get; set; } = true;
+    public bool ShowElapsedColumn { get; set; } = true;
+    public bool ShowAppColumn { get; set; } = true;
+    public bool ShowSessionColumn { get; set; } = true;
+    public bool ShowTitleColumn { get; set; } = true;
+    public bool ShowThreadColumn { get; set; } = true;
 }

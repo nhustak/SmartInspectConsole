@@ -19,6 +19,7 @@
         <conv:ColorToBrushConverter x:Key="ColorToBrushConverter"/>
         <conv:BoolToVisibilityConverter x:Key="BoolToVisibilityConverter"/>
         <conv:BoolToGridLengthConverter x:Key="BoolToGridLengthConverter"/>
+        <conv:BoolToColumnWidthConverter x:Key="BoolToColumnWidthConverter"/>
 
         <!-- Local styles that use DynamicResource for theme switching -->
         <Style TargetType="GroupBox">
@@ -118,23 +119,36 @@
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="TabItem">
-                        <Border x:Name="Border"
-                                Background="{DynamicResource SurfaceBrush}"
-                                BorderBrush="{DynamicResource BorderBrush}"
-                                BorderThickness="1,1,1,0"
-                                CornerRadius="4,4,0,0"
-                                Margin="2,0,0,0"
-                                Padding="{TemplateBinding Padding}">
-                            <ContentPresenter x:Name="ContentSite"
-                                              ContentSource="Header"
-                                              HorizontalAlignment="Center"
-                                              VerticalAlignment="Center"/>
-                        </Border>
+                        <Grid>
+                            <Border x:Name="Border"
+                                    Background="{DynamicResource SurfaceBrush}"
+                                    BorderBrush="{DynamicResource BorderBrush}"
+                                    BorderThickness="1,1,1,0"
+                                    CornerRadius="4,4,0,0"
+                                    Margin="2,0,0,0"
+                                    Padding="{TemplateBinding Padding}">
+                                <ContentPresenter x:Name="ContentSite"
+                                                  ContentSource="Header"
+                                                  HorizontalAlignment="Center"
+                                                  VerticalAlignment="Center"/>
+                            </Border>
+                            <!-- Active tab indicator bar -->
+                            <Border x:Name="ActiveIndicator"
+                                    Height="3"
+                                    VerticalAlignment="Top"
+                                    Margin="3,1,1,0"
+                                    CornerRadius="2,2,0,0"
+                                    Background="#2196F3"
+                                    Visibility="Collapsed"/>
+                        </Grid>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsSelected" Value="True">
                                 <Setter TargetName="Border" Property="Background" Value="{DynamicResource BackgroundBrush}"/>
                                 <Setter TargetName="Border" Property="BorderThickness" Value="1,1,1,0"/>
                                 <Setter TargetName="Border" Property="Margin" Value="2,-2,0,0"/>
+                                <Setter TargetName="ActiveIndicator" Property="Visibility" Value="Visible"/>
+                                <Setter TargetName="ActiveIndicator" Property="Margin" Value="3,-1,1,0"/>
+                                <Setter Property="FontWeight" Value="SemiBold"/>
                             </Trigger>
                             <Trigger Property="IsMouseOver" Value="True">
                                 <Setter TargetName="Border" Property="Background" Value="{DynamicResource HoverBrush}"/>
@@ -309,33 +323,31 @@
                                 <!-- View Filters -->
                                 <Border Grid.Row="0" Background="{DynamicResource SurfaceBrush}" Padding="8,4" Margin="0,0,0,4">
                                     <WrapPanel>
-                                        <StackPanel Orientation="Horizontal" Margin="0,0,16,0">
+                                        <StackPanel Orientation="Horizontal" Margin="0,0,16,0"
+                                                    Visibility="{Binding ShowAppColumn, Converter={StaticResource BoolToVisibilityConverter}}">
                                             <TextBlock Text="App:" VerticalAlignment="Center" Margin="0,0,4,0"/>
                                             <TextBox Width="120" Text="{Binding AppNameFilter, UpdateSourceTrigger=PropertyChanged}"
                                                      ToolTip="Filter by application name"/>
                                         </StackPanel>
-                                        <StackPanel Orientation="Horizontal" Margin="0,0,16,0">
+                                        <StackPanel Orientation="Horizontal" Margin="0,0,16,0"
+                                                    Visibility="{Binding ShowSessionColumn, Converter={StaticResource BoolToVisibilityConverter}}">
                                             <TextBlock Text="Session:" VerticalAlignment="Center" Margin="0,0,4,0"/>
                                             <TextBox Width="120" Text="{Binding SessionFilter, UpdateSourceTrigger=PropertyChanged}"
                                                      ToolTip="Filter by session name"/>
                                         </StackPanel>
-                                        <StackPanel Orientation="Horizontal" Margin="0,0,16,0">
+                                        <StackPanel Orientation="Horizontal" Margin="0,0,16,0"
+                                                    Visibility="{Binding ShowTitleColumn, Converter={StaticResource BoolToVisibilityConverter}}">
                                             <TextBlock Text="Text:" VerticalAlignment="Center" Margin="0,0,4,0"/>
                                             <TextBox Width="150" Text="{Binding TextFilter, UpdateSourceTrigger=PropertyChanged}"
                                                      ToolTip="Filter by title or data content"/>
                                         </StackPanel>
-                                        <StackPanel Orientation="Horizontal" Margin="0,0,16,0">
+                                        <StackPanel Orientation="Horizontal">
                                             <TextBlock Text="Level:" VerticalAlignment="Center" Margin="0,0,4,0"/>
                                             <ComboBox Width="100"
                                                       ItemsSource="{Binding LogLevels}"
                                                       SelectedItem="{Binding SelectedLogLevel}"
                                                       DisplayMemberPath="DisplayName"
                                                       ToolTip="Minimum log level"/>
-                                        </StackPanel>
-                                        <StackPanel Orientation="Horizontal">
-                                            <TextBlock Text="Name:" VerticalAlignment="Center" Margin="0,0,4,0"/>
-                                            <TextBox Width="100" Text="{Binding Name, UpdateSourceTrigger=PropertyChanged}"
-                                                     ToolTip="View name (shown in tab)"/>
                                         </StackPanel>
                                     </WrapPanel>
                                 </Border>
@@ -358,12 +370,24 @@
                                                     </DataTemplate>
                                                 </GridViewColumn.CellTemplate>
                                             </GridViewColumn>
-                                            <GridViewColumn Header="Time" Width="90" DisplayMemberBinding="{Binding Timestamp, StringFormat=HH:mm:ss.fff}"/>
-                                            <GridViewColumn Header="Elapsed" Width="70" DisplayMemberBinding="{Binding ElapsedTimeFormatted}"/>
-                                            <GridViewColumn Header="App" Width="100" DisplayMemberBinding="{Binding AppName}"/>
-                                            <GridViewColumn Header="Session" Width="80" DisplayMemberBinding="{Binding SessionName}"/>
-                                            <GridViewColumn Header="Title" Width="350" DisplayMemberBinding="{Binding Title}"/>
-                                            <GridViewColumn Header="Thread" Width="50" DisplayMemberBinding="{Binding ThreadId}"/>
+                                            <GridViewColumn Header="Time"
+                                                            Width="{Binding ShowTimeColumn, Converter={StaticResource BoolToColumnWidthConverter}, ConverterParameter=90}"
+                                                            DisplayMemberBinding="{Binding Timestamp, StringFormat=HH:mm:ss.fff}"/>
+                                            <GridViewColumn Header="Elapsed"
+                                                            Width="{Binding ShowElapsedColumn, Converter={StaticResource BoolToColumnWidthConverter}, ConverterParameter=70}"
+                                                            DisplayMemberBinding="{Binding ElapsedTimeFormatted}"/>
+                                            <GridViewColumn Header="App"
+                                                            Width="{Binding ShowAppColumn, Converter={StaticResource BoolToColumnWidthConverter}, ConverterParameter=100}"
+                                                            DisplayMemberBinding="{Binding AppName}"/>
+                                            <GridViewColumn Header="Session"
+                                                            Width="{Binding ShowSessionColumn, Converter={StaticResource BoolToColumnWidthConverter}, ConverterParameter=80}"
+                                                            DisplayMemberBinding="{Binding SessionName}"/>
+                                            <GridViewColumn Header="Title"
+                                                            Width="{Binding ShowTitleColumn, Converter={StaticResource BoolToColumnWidthConverter}, ConverterParameter=350}"
+                                                            DisplayMemberBinding="{Binding Title}"/>
+                                            <GridViewColumn Header="Thread"
+                                                            Width="{Binding ShowThreadColumn, Converter={StaticResource BoolToColumnWidthConverter}, ConverterParameter=50}"
+                                                            DisplayMemberBinding="{Binding ThreadId}"/>
                                         </GridView>
                                     </ListView.View>
                                 </ListView>
