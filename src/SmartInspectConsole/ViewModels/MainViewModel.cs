@@ -19,6 +19,7 @@ public class MainViewModel : ViewModelBase, IDisposable
 {
     private SmartInspectTcpListener? _tcpListener;
     private SmartInspectPipeListener? _pipeListener;
+    private SmartInspectWebSocketListener? _webSocketListener;
     private readonly object _logEntriesLock = new();
 
     private DateTime? _lastLogEntryTimestamp;
@@ -36,6 +37,8 @@ public class MainViewModel : ViewModelBase, IDisposable
     // Network settings
     private int _tcpPort = SmartInspectTcpListener.DefaultPort;
     private string _pipeName = SmartInspectPipeListener.DefaultPipeName;
+    private int _webSocketPort = SmartInspectWebSocketListener.DefaultPort;
+    private bool _debugMode = false;
 
     public MainViewModel()
     {
@@ -142,6 +145,7 @@ public class MainViewModel : ViewModelBase, IDisposable
             {
                 OnPropertyChanged(nameof(TcpStatus));
                 OnPropertyChanged(nameof(PipeStatus));
+                OnPropertyChanged(nameof(WebSocketStatus));
             }
         }
     }
@@ -153,6 +157,10 @@ public class MainViewModel : ViewModelBase, IDisposable
     public string PipeStatus => IsListening && _pipeListener != null
         ? $"Pipe: {_pipeName} ({_pipeListener.ClientCount} clients)"
         : $"Pipe: {_pipeName} (Stopped)";
+
+    public string WebSocketStatus => IsListening && _webSocketListener != null
+        ? $"WebSocket: {_webSocketPort} ({_webSocketListener.ClientCount} clients)"
+        : $"WebSocket: {_webSocketPort} (Stopped)";
 
     public int EntryCount => LogEntries.Count;
 
@@ -195,6 +203,30 @@ public class MainViewModel : ViewModelBase, IDisposable
             if (SetProperty(ref _pipeName, value))
             {
                 OnPropertyChanged(nameof(PipeStatus));
+            }
+        }
+    }
+
+    public int WebSocketPort
+    {
+        get => _webSocketPort;
+        set
+        {
+            if (SetProperty(ref _webSocketPort, value))
+            {
+                OnPropertyChanged(nameof(WebSocketStatus));
+            }
+        }
+    }
+
+    public bool DebugMode
+    {
+        get => _debugMode;
+        set
+        {
+            if (SetProperty(ref _debugMode, value))
+            {
+                SmartInspectWebSocketListener.DebugMode = value;
             }
         }
     }
@@ -259,6 +291,14 @@ public class MainViewModel : ViewModelBase, IDisposable
                 _pipeListener.Error -= OnError;
                 cleanupTasks.Add(_pipeListener.StopAsync());
             }
+            if (_webSocketListener != null)
+            {
+                _webSocketListener.PacketReceived -= OnPacketReceived;
+                _webSocketListener.ClientConnected -= OnClientConnected;
+                _webSocketListener.ClientDisconnected -= OnClientDisconnected;
+                _webSocketListener.Error -= OnError;
+                cleanupTasks.Add(_webSocketListener.StopAsync());
+            }
             if (cleanupTasks.Count > 0)
             {
                 await Task.WhenAll(cleanupTasks);
@@ -280,9 +320,17 @@ public class MainViewModel : ViewModelBase, IDisposable
             _pipeListener.ClientDisconnected += OnClientDisconnected;
             _pipeListener.Error += OnError;
 
+            // Create WebSocket listener for browser clients
+            _webSocketListener = new SmartInspectWebSocketListener(_webSocketPort);
+            _webSocketListener.PacketReceived += OnPacketReceived;
+            _webSocketListener.ClientConnected += OnClientConnected;
+            _webSocketListener.ClientDisconnected += OnClientDisconnected;
+            _webSocketListener.Error += OnError;
+
             await Task.WhenAll(
                 _tcpListener.StartAsync(),
-                _pipeListener.StartAsync());
+                _pipeListener.StartAsync(),
+                _webSocketListener.StartAsync());
 
             IsListening = true;
             StatusText = "Listening for connections...";
@@ -308,6 +356,8 @@ public class MainViewModel : ViewModelBase, IDisposable
                 tasks.Add(_tcpListener.StopAsync());
             if (_pipeListener != null)
                 tasks.Add(_pipeListener.StopAsync());
+            if (_webSocketListener != null)
+                tasks.Add(_webSocketListener.StopAsync());
 
             await Task.WhenAll(tasks);
 
@@ -496,6 +546,7 @@ public class MainViewModel : ViewModelBase, IDisposable
         });
     }
 
+    private static int _diagCount = 0;
     private void HandleLogEntry(LogEntry logEntry)
     {
         // Calculate elapsed time since previous entry
@@ -517,6 +568,23 @@ public class MainViewModel : ViewModelBase, IDisposable
         foreach (var view in Views)
         {
             view.RefreshFilter();
+        }
+
+        // Quick diagnostic - show first entry info
+        if (_diagCount++ == 0 && DebugMode)
+        {
+            var info = $"First entry received!\n\n" +
+                       $"Type: {logEntry.LogEntryType}\n" +
+                       $"Session: {logEntry.SessionName}\n" +
+                       $"App: {logEntry.AppName}\n" +
+                       $"Title: {logEntry.Title}\n\n" +
+                       $"LogEntries.Count: {LogEntries.Count}\n" +
+                       $"Views.Count: {Views.Count}\n\n";
+            foreach (var v in Views)
+            {
+                info += $"View '{v.Name}': FilteredCount={v.FilteredCount}, ShowMessage={v.ShowMessage}, ShowDebug={v.ShowDebug}\n";
+            }
+            MessageBox.Show(info, "Debug: First Entry");
         }
 
         OnPropertyChanged(nameof(EntryCount));
@@ -609,6 +677,7 @@ public class MainViewModel : ViewModelBase, IDisposable
             StatusText = $"Client connected: {e.ClientId}";
             OnPropertyChanged(nameof(TcpStatus));
             OnPropertyChanged(nameof(PipeStatus));
+            OnPropertyChanged(nameof(WebSocketStatus));
         });
     }
 
@@ -619,6 +688,7 @@ public class MainViewModel : ViewModelBase, IDisposable
             StatusText = $"Client disconnected: {e.ClientId}";
             OnPropertyChanged(nameof(TcpStatus));
             OnPropertyChanged(nameof(PipeStatus));
+            OnPropertyChanged(nameof(WebSocketStatus));
         });
     }
 
@@ -627,6 +697,20 @@ public class MainViewModel : ViewModelBase, IDisposable
         Application.Current.Dispatcher.BeginInvoke(() =>
         {
             StatusText = $"Error: {e.Message}";
+
+            // Log errors to the console
+            var errorEntry = new LogEntry
+            {
+                Timestamp = DateTime.Now,
+                LogEntryType = LogEntryType.Error,
+                SessionName = "[Console]",
+                AppName = "Console",
+                Title = e.Message,
+                Data = System.Text.Encoding.UTF8.GetBytes(e.ToString()),
+                ViewerId = ViewerId.Data,
+                Color = System.Drawing.Color.FromArgb(255, 200, 80, 80)
+            };
+            HandleLogEntry(errorEntry);
         });
     }
 
@@ -695,6 +779,10 @@ public class MainViewModel : ViewModelBase, IDisposable
         // Network settings
         state.TcpPort = TcpPort;
         state.PipeName = PipeName;
+        state.WebSocketPort = WebSocketPort;
+
+        // Developer settings
+        state.DebugMode = DebugMode;
 
         // Views
         state.Views.Clear();
@@ -720,6 +808,10 @@ public class MainViewModel : ViewModelBase, IDisposable
         // Network settings
         TcpPort = state.TcpPort > 0 ? state.TcpPort : SmartInspectTcpListener.DefaultPort;
         PipeName = !string.IsNullOrWhiteSpace(state.PipeName) ? state.PipeName : SmartInspectPipeListener.DefaultPipeName;
+        WebSocketPort = state.WebSocketPort > 0 ? state.WebSocketPort : SmartInspectWebSocketListener.DefaultPort;
+
+        // Developer settings
+        DebugMode = state.DebugMode;
 
         // Restore views if any saved
         if (state.Views.Count > 0)
@@ -832,6 +924,7 @@ public class MainViewModel : ViewModelBase, IDisposable
     {
         _tcpListener?.Dispose();
         _pipeListener?.Dispose();
+        _webSocketListener?.Dispose();
     }
 
     #endregion

@@ -40,6 +40,10 @@ public class AppState
     // Network settings
     public int TcpPort { get; set; } = 4228;
     public string PipeName { get; set; } = "smartinspect";
+    public int WebSocketPort { get; set; } = 4229;
+
+    // Developer settings
+    public bool DebugMode { get; set; } = false;
 
     // Views configuration
     public List<ViewState> Views { get; set; } = new();

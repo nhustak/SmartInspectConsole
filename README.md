@@ -1,25 +1,27 @@
 # SmartInspect Console
 
-**Version 2026.1.25.0**
+**Version 2026.1.25.1**
 
 A WPF-based replacement console for receiving and displaying real-time logging data from SmartInspectCore logging system.
 
 ## Overview
 
 I've been using SmartInspect for a looooonnngggg time.  I found it way back in my Delphi days (I was one of the early adopters).
-I still use it, despite the fact it hasn't had a refresh in...lord...20 years?   A company bought it recently and were supposedly working on it.
-I was waiting to see - the console was never really finished and sucks.
-Well I got tired of it...and realized Claude could help me here.
+I still use it, despite the fact the console hasn't had a refresh in...lord...20 years?
+It looked like Code Partners was going to advance it but it seems to have stalled.
 
-Yes, the code in this project is 100% Claude Code.
+So it occurred to me...Claude could probably solve this pain point for me.
+
+The code in this project is 100% Claude Code.
 
 So here we go - if you use SmartInspect, you should love this.   I have no idea if I'm breaking copyright here.  If I am, well they can give me a take down and I'll pull it.
-Reality is it's been abandoned and it still is.  IMHO, this brings it back to life.
+I hope they see it for what it is - something to make the console logs far more usable and maybe get them some sales.
+
 You still must buy the product and you should.  It is one of the most useful tools I have.
+https://code-partners.com/offerings/smartinspect/
 
 For instance, I have it setup with a memory buffer.  If the app crashes, it grabs that buffer and puts in the email.  I can then pull it up in the console (this console can't yet) and review the logs for what was happening over the last few minutes.
 
-https://code-partners.com/offerings/smartinspect/
 
 SmartInspect Console is a replacement for the original Gurock SmartInspect Console. It receives log packets from SmartInspectCore applications via TCP (port 4228) and Named Pipes (`smartinspect`), displaying them in a real-time viewer.
 
@@ -61,6 +63,7 @@ SmartInspect Console is a replacement for the original Gurock SmartInspect Conso
 ### Settings
 - **Configurable TCP Port**: Change the listening port (default: 4228)
 - **Configurable Pipe Name**: Change the pipe name (default: smartinspect)
+- **Configurable WebSocket Port**: Change the WebSocket port for browser clients (default: 4229)
 - **Per-View Settings**: Each view maintains its own filter and display settings
 
 ## Project Structure
@@ -102,8 +105,9 @@ dotnet run --project src/SmartInspectConsole
 
 1. Start the SmartInspect Console
 2. The console automatically starts listening on:
-   - TCP port 4228
-   - Named pipe `smartinspect`
+   - TCP port 4228 (SmartInspectCore binary protocol)
+   - Named pipe `smartinspect` (SmartInspectCore binary protocol)
+   - WebSocket port 4229 (smartinspect-js JSON protocol)
 3. Connect your SmartInspectCore application:
 
 ```csharp
@@ -125,6 +129,69 @@ si.Connections = "mem(maxsize=2048, astext=true), " +
                  "pipe(reconnect=true, reconnect.interval=5s), " +
                  "tcp(host=localhost, reconnect=true, reconnect.interval=5s)";
 ```
+
+## JavaScript/Browser Logging (smartinspect-js)
+
+**Note: This only works with this new console - not the original Gurock SmartInspect Console.**
+
+The `smartinspect-js` library allows browser-based JavaScript and TypeScript applications to send logs to the SmartInspect Console via WebSocket (port 4229).
+
+### Installation
+
+```bash
+npm install smartinspect-js
+```
+
+Or include directly in your HTML:
+```html
+<script src="path/to/smartinspect.js"></script>
+```
+
+### Usage
+
+```typescript
+import { SmartInspect, Session } from 'smartinspect-js';
+
+// Create and configure SmartInspect instance
+const si = new SmartInspect('My Browser App');
+si.connect('ws://localhost:4229');
+
+// Create a session for logging
+const session = si.addSession('Main');
+
+// Log messages at different levels
+session.logDebug('Debug information');
+session.logVerbose('Verbose details');
+session.logMessage('General message');
+session.logWarning('Warning message');
+session.logError('Error occurred');
+session.logFatal('Fatal error!');
+
+// Log with data
+session.logMessage('User data', { userId: 123, name: 'John' });
+
+// Enter/Leave method tracking
+session.enterMethod('processData');
+// ... do work ...
+session.leaveMethod('processData');
+
+// Watch variables
+session.watch('counter', 42);
+session.watch('status', 'active');
+```
+
+### Features
+
+- WebSocket-based communication (no CORS issues with localhost)
+- Full logging level support (Debug, Verbose, Message, Warning, Error, Fatal)
+- Method entry/exit tracking for process flow visualization
+- Variable watching for real-time monitoring
+- Automatic reconnection on connection loss
+- TypeScript support with full type definitions
+
+### Console Configuration
+
+The console listens on WebSocket port 4229 by default. This can be changed in Settings (File > Settings).
 
 ## Protocol Compatibility
 
@@ -159,7 +226,7 @@ The console is fully compatible with SmartInspectCore's binary protocol:
 │ Process Flow                          │                            │
 │ │ Type │ Title │ Thread │ Time │      │                            │
 ├────────────────────────────────────────────────────────────────────┤
-│ Ready │ TCP: Port 4228 │ Pipe: smartinspect │ Entries: 0          │
+│ Ready │ TCP: 4228 │ Pipe: smartinspect │ WS: 4229 │ Entries: 0  │
 └────────────────────────────────────────────────────────────────────┘
 ```
 

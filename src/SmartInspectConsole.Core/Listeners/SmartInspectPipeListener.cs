@@ -26,6 +26,11 @@ public class SmartInspectPipeListener : IPacketListener
     private readonly BinaryPacketReader _packetReader = new();
     private int _clientCounter;
 
+    // Global error tracking to prevent spam from multiple instances
+    private static string? _lastGlobalErrorMessage;
+    private static DateTime _lastGlobalErrorTime = DateTime.MinValue;
+    private static readonly object _errorLock = new();
+
     public event EventHandler<PacketReceivedEventArgs>? PacketReceived;
     public event EventHandler<ClientEventArgs>? ClientConnected;
     public event EventHandler<ClientEventArgs>? ClientDisconnected;
@@ -103,8 +108,7 @@ public class SmartInspectPipeListener : IPacketListener
     private async Task ListenForConnectionAsync(CancellationToken cancellationToken)
     {
         int retryDelay = 100;
-        const int MaxRetryDelay = 5000;
-        string? lastErrorMessage = null;
+        const int MaxRetryDelay = 30000; // Longer max delay to reduce spam
 
         while (!cancellationToken.IsCancellationRequested && IsListening)
         {
@@ -112,28 +116,12 @@ public class SmartInspectPipeListener : IPacketListener
 
             try
             {
-                // Create pipe security that allows all users to connect
-                var pipeSecurity = new PipeSecurity();
-                pipeSecurity.AddAccessRule(new PipeAccessRule(
-                    new SecurityIdentifier(WellKnownSidType.WorldSid, null),
-                    PipeAccessRights.ReadWrite,
-                    AccessControlType.Allow));
-
-                pipeServer = NamedPipeServerStreamAcl.Create(
-                    _pipeName,
-                    PipeDirection.InOut,
-                    MaxInstances,
-                    PipeTransmissionMode.Byte,
-                    PipeOptions.Asynchronous,
-                    0,
-                    0,
-                    pipeSecurity);
+                pipeServer = CreatePipeServer();
 
                 await pipeServer.WaitForConnectionAsync(cancellationToken);
 
                 // Reset retry delay on successful connection
                 retryDelay = 100;
-                lastErrorMessage = null;
 
                 var clientId = $"pipe-{Interlocked.Increment(ref _clientCounter)}";
                 _clients[clientId] = pipeServer;
@@ -149,21 +137,80 @@ public class SmartInspectPipeListener : IPacketListener
             }
             catch (Exception ex)
             {
-                // Only report error if it's different from the last one (avoid spam)
-                if (ex.Message != lastErrorMessage)
-                {
-                    OnError(ex);
-                    lastErrorMessage = ex.Message;
-                }
+                // Global rate limiting - only report if different error or enough time passed
+                ReportErrorWithRateLimit(ex);
 
                 // Exponential backoff for retries
-                await Task.Delay(retryDelay, cancellationToken);
+                try
+                {
+                    await Task.Delay(retryDelay, cancellationToken);
+                }
+                catch (OperationCanceledException)
+                {
+                    break;
+                }
                 retryDelay = Math.Min(retryDelay * 2, MaxRetryDelay);
             }
             finally
             {
                 // Only dispose if we didn't transfer ownership
                 pipeServer?.Dispose();
+            }
+        }
+    }
+
+    private NamedPipeServerStream CreatePipeServer()
+    {
+        // First try with custom security that allows all users
+        try
+        {
+            var pipeSecurity = new PipeSecurity();
+            pipeSecurity.AddAccessRule(new PipeAccessRule(
+                new SecurityIdentifier(WellKnownSidType.WorldSid, null),
+                PipeAccessRights.ReadWrite,
+                AccessControlType.Allow));
+
+            return NamedPipeServerStreamAcl.Create(
+                _pipeName,
+                PipeDirection.InOut,
+                MaxInstances,
+                PipeTransmissionMode.Byte,
+                PipeOptions.Asynchronous,
+                0,
+                0,
+                pipeSecurity);
+        }
+        catch (UnauthorizedAccessException)
+        {
+            // Fall back to default security (only current user can connect)
+            // This is expected when not running as admin - don't report as error
+            return new NamedPipeServerStream(
+                _pipeName,
+                PipeDirection.InOut,
+                MaxInstances,
+                PipeTransmissionMode.Byte,
+                PipeOptions.Asynchronous);
+        }
+    }
+
+    private void ReportErrorWithRateLimit(Exception ex)
+    {
+        // Don't report UnauthorizedAccessException - it's expected when not running as admin
+        // and the fallback in CreatePipeServer handles it gracefully
+        if (ex is UnauthorizedAccessException)
+            return;
+
+        lock (_errorLock)
+        {
+            var now = DateTime.UtcNow;
+            var timeSinceLastError = now - _lastGlobalErrorTime;
+
+            // Only report if different message or at least 30 seconds have passed
+            if (ex.Message != _lastGlobalErrorMessage || timeSinceLastError.TotalSeconds >= 30)
+            {
+                _lastGlobalErrorMessage = ex.Message;
+                _lastGlobalErrorTime = now;
+                OnError(ex);
             }
         }
     }

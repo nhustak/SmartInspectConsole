@@ -10,14 +10,20 @@ public partial class SettingsDialog : Window
 {
     public int TcpPort { get; private set; }
     public string PipeName { get; private set; }
+    public int WebSocketPort { get; private set; }
+    public bool DebugMode { get; private set; }
 
-    public SettingsDialog(int currentPort, string currentPipeName)
+    public SettingsDialog(int currentPort, string currentPipeName, int currentWebSocketPort, bool debugMode)
     {
         InitializeComponent();
         TcpPort = currentPort;
         PipeName = currentPipeName;
+        WebSocketPort = currentWebSocketPort;
+        DebugMode = debugMode;
         TcpPortTextBox.Text = currentPort.ToString();
         PipeNameTextBox.Text = currentPipeName;
+        WebSocketPortTextBox.Text = currentWebSocketPort.ToString();
+        DebugModeCheckBox.IsChecked = debugMode;
     }
 
     private void OK_Click(object sender, RoutedEventArgs e)
@@ -41,8 +47,28 @@ public partial class SettingsDialog : Window
             return;
         }
 
+        // Validate WebSocket port
+        if (!int.TryParse(WebSocketPortTextBox.Text, out var wsPort) || wsPort <= 0 || wsPort > 65535)
+        {
+            MessageBox.Show("Please enter a valid WebSocket port number (1-65535).", "Invalid Port",
+                MessageBoxButton.OK, MessageBoxImage.Warning);
+            WebSocketPortTextBox.Focus();
+            return;
+        }
+
+        // Check for port conflicts
+        if (port == wsPort)
+        {
+            MessageBox.Show("TCP and WebSocket ports must be different.", "Port Conflict",
+                MessageBoxButton.OK, MessageBoxImage.Warning);
+            WebSocketPortTextBox.Focus();
+            return;
+        }
+
         TcpPort = port;
         PipeName = pipeName;
+        WebSocketPort = wsPort;
+        DebugMode = DebugModeCheckBox.IsChecked == true;
         DialogResult = true;
         Close();
     }
@@ -61,5 +87,10 @@ public partial class SettingsDialog : Window
     private void DefaultPipe_Click(object sender, RoutedEventArgs e)
     {
         PipeNameTextBox.Text = SmartInspectPipeListener.DefaultPipeName;
+    }
+
+    private void DefaultWebSocket_Click(object sender, RoutedEventArgs e)
+    {
+        WebSocketPortTextBox.Text = SmartInspectWebSocketListener.DefaultPort.ToString();
     }
 }

@@ -1,0 +1,37 @@
+{
+  "name": "smartinspect-js",
+  "version": "2026.1.25.0",
+  "description": "SmartInspect logging client for browser-based JavaScript/TypeScript applications",
+  "main": "dist/smartinspect.js",
+  "module": "dist/smartinspect.esm.js",
+  "types": "dist/smartinspect.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/smartinspect.esm.js",
+      "require": "./dist/smartinspect.js",
+      "types": "./dist/smartinspect.d.ts"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc && npm run bundle",
+    "bundle": "node scripts/bundle.js",
+    "watch": "tsc --watch",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": [
+    "smartinspect",
+    "logging",
+    "debug",
+    "browser",
+    "typescript"
+  ],
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "typescript": "^5.0.0",
+    "esbuild": "^0.20.0"
+  }
+}

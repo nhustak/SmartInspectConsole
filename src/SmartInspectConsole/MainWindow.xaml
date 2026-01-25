@@ -639,6 +639,10 @@
             </StatusBarItem>
             <Separator Background="{DynamicResource BorderBrush}"/>
             <StatusBarItem>
+                <TextBlock Text="{Binding WebSocketStatus}"/>
+            </StatusBarItem>
+            <Separator Background="{DynamicResource BorderBrush}"/>
+            <StatusBarItem>
                 <TextBlock Text="{Binding EntryCount, StringFormat=Total: {0}}"/>
             </StatusBarItem>
         </StatusBar>

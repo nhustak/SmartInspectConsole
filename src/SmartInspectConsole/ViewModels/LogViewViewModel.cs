@@ -14,6 +14,7 @@ public class LogViewViewModel : ViewModelBase
 {
     private readonly ObservableCollection<LogEntry> _allLogEntries;
     private readonly object _lockObject;
+    private readonly CollectionViewSource _viewSource;
 
     private string _name = "View";
     private string _appNameFilter = string.Empty;
@@ -65,8 +66,11 @@ public class LogViewViewModel : ViewModelBase
         _name = name;
         _isPrimaryView = isPrimaryView;
 
-        // Create a filtered view of the shared log entries
-        FilteredLogEntries = CollectionViewSource.GetDefaultView(_allLogEntries);
+        // Create a NEW filtered view for this view (not the shared default view)
+        // Each view needs its own CollectionViewSource to have independent filters
+        // Keep reference to prevent garbage collection
+        _viewSource = new CollectionViewSource { Source = _allLogEntries };
+        FilteredLogEntries = _viewSource.View;
         FilteredLogEntries.Filter = FilterLogEntry;
 
         // Available log levels for filtering

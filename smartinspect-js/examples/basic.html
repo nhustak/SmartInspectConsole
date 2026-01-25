@@ -1,0 +1,449 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SmartInspect JS - Basic Example</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #1e1e1e;
+            color: #e0e0e0;
+        }
+        h1 { color: #4fc3f7; }
+        h2 { color: #81c784; margin-top: 30px; }
+        button {
+            background: #2196f3;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            margin: 5px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        button:hover { background: #1976d2; }
+        button:disabled { background: #555; cursor: not-allowed; }
+        .button-group { margin: 10px 0; }
+        #status {
+            padding: 10px;
+            margin: 20px 0;
+            border-radius: 4px;
+            font-weight: bold;
+        }
+        .connected { background: #2e7d32; }
+        .disconnected { background: #c62828; }
+        .connecting { background: #f57c00; }
+        #output {
+            background: #252526;
+            border: 1px solid #3c3c3c;
+            padding: 15px;
+            border-radius: 4px;
+            font-family: 'Consolas', 'Monaco', monospace;
+            font-size: 13px;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+        .log-line { margin: 2px 0; }
+        .log-info { color: #4fc3f7; }
+        .log-warn { color: #ffb74d; }
+        .log-error { color: #ef5350; }
+        input[type="text"] {
+            background: #2d2d2d;
+            border: 1px solid #3c3c3c;
+            color: #e0e0e0;
+            padding: 8px 12px;
+            border-radius: 4px;
+            width: 250px;
+        }
+        label { margin-right: 10px; }
+    </style>
+</head>
+<body>
+    <h1>SmartInspect JS - Browser Logging Example</h1>
+
+    <div>
+        <label>Console URL:</label>
+        <input type="text" id="wsUrl" value="ws://localhost:4229">
+        <button id="connectBtn" onclick="toggleConnection()">Connect</button>
+    </div>
+
+    <div id="status" class="disconnected">Disconnected</div>
+
+    <h2>Log Messages</h2>
+    <div class="button-group">
+        <button onclick="logMessage()">Log Message</button>
+        <button onclick="logWarning()">Log Warning</button>
+        <button onclick="logError()">Log Error</button>
+        <button onclick="logDebug()">Log Debug</button>
+        <button onclick="logSeparator()">Separator</button>
+    </div>
+
+    <h2>Log Data</h2>
+    <div class="button-group">
+        <button onclick="logObject()">Log Object</button>
+        <button onclick="logJson()">Log JSON</button>
+        <button onclick="logException()">Log Exception</button>
+        <button onclick="logArray()">Log Array</button>
+    </div>
+
+    <h2>Watches</h2>
+    <div class="button-group">
+        <button onclick="watchCounter()">Watch Counter</button>
+        <button onclick="watchBoolean()">Watch Boolean</button>
+        <button onclick="watchObject()">Watch Object</button>
+    </div>
+
+    <h2>Process Flow</h2>
+    <div class="button-group">
+        <button onclick="trackMethod()">Track Method</button>
+        <button onclick="nestedMethods()">Nested Methods</button>
+    </div>
+
+    <h2>Control</h2>
+    <div class="button-group">
+        <button onclick="clearLog()">Clear Log</button>
+        <button onclick="clearWatches()">Clear Watches</button>
+        <button onclick="clearAll()">Clear All</button>
+    </div>
+
+    <h2>Console Output</h2>
+    <div id="output"></div>
+
+    <!-- Load the library - use dist/smartinspect.js after building -->
+    <script type="module">
+        // For development, we import directly from the source
+        // After building, you can use: <script src="../dist/smartinspect.min.js">
+        // and access via SmartInspectJS.SiAuto, SmartInspectJS.SmartInspect, etc.
+
+        // Simulated SmartInspect implementation for demo
+        // Replace with actual import after building
+        class WebSocketConnection {
+            constructor() {
+                this.ws = null;
+                this.state = 'disconnected';
+                this.buffer = [];
+                this.autoReconnect = true;
+                this.reconnectDelay = 2000;
+                this.maxReconnectAttempts = 0;
+                this.bufferWhenDisconnected = true;
+                this.maxBufferSize = 1000;
+                this.events = {};
+            }
+
+            get connectionState() { return this.state; }
+            get isConnected() { return this.state === 'connected'; }
+
+            async connect(url) {
+                return new Promise((resolve, reject) => {
+                    try {
+                        this.ws = new WebSocket(url);
+                        this.setState('connecting');
+
+                        this.ws.onopen = () => {
+                            this.setState('connected');
+                            this.flushBuffer();
+                            resolve();
+                        };
+
+                        this.ws.onclose = () => {
+                            this.setState('disconnected');
+                        };
+
+                        this.ws.onerror = () => {
+                            this.setState('disconnected');
+                            reject(new Error('Connection failed'));
+                        };
+                    } catch (e) {
+                        reject(e);
+                    }
+                });
+            }
+
+            disconnect() {
+                if (this.ws) {
+                    this.ws.close();
+                    this.ws = null;
+                }
+                this.setState('disconnected');
+            }
+
+            send(message) {
+                if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+                    this.ws.send(JSON.stringify(message));
+                } else if (this.bufferWhenDisconnected) {
+                    this.buffer.push(message);
+                    if (this.buffer.length > this.maxBufferSize) {
+                        this.buffer.shift();
+                    }
+                }
+            }
+
+            setState(state) {
+                const prev = this.state;
+                this.state = state;
+                if (prev !== state) {
+                    this.events.onStateChange?.(state);
+                    if (state === 'connected') this.events.onConnected?.();
+                    if (state === 'disconnected') this.events.onDisconnected?.();
+                }
+            }
+
+            flushBuffer() {
+                if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+                    for (const msg of this.buffer) {
+                        this.ws.send(JSON.stringify(msg));
+                    }
+                    this.buffer = [];
+                }
+            }
+        }
+
+        class Session {
+            constructor(connection, name, appName) {
+                this.connection = connection;
+                this.name = name;
+                this.appName = appName;
+                this.active = true;
+            }
+
+            logMessage(title, data, color) { this._log('message', title, data, color); }
+            logWarning(title, data, color) { this._log('warning', title, data, color); }
+            logError(title, data, color) { this._log('error', title, data, color); }
+            logDebug(title, data, color) { this._log('debug', title, data, color); }
+            logSeparator(title) { this._log('separator', title || ''); }
+
+            logObject(title, obj, color) {
+                this._sendLogEntry('object', title, JSON.stringify(obj, null, 2), 'json', color);
+            }
+
+            logJson(title, data, color) {
+                const json = typeof data === 'string' ? data : JSON.stringify(data, null, 2);
+                this._sendLogEntry('text', title, json, 'json', color);
+            }
+
+            logException(title, error, color) {
+                const data = { name: error.name, message: error.message, stack: error.stack };
+                this._sendLogEntry('error', title, JSON.stringify(data, null, 2), 'json', color || '#FF0000');
+            }
+
+            watch(name, value) {
+                let watchType = 'string';
+                let stringValue = String(value);
+
+                if (typeof value === 'number') {
+                    watchType = Number.isInteger(value) ? 'integer' : 'float';
+                    stringValue = value.toString();
+                } else if (typeof value === 'boolean') {
+                    watchType = 'boolean';
+                    stringValue = value.toString();
+                } else if (typeof value === 'object') {
+                    watchType = 'object';
+                    stringValue = JSON.stringify(value);
+                }
+
+                this.connection.send({ type: 'watch', name, value: stringValue, watchType });
+            }
+
+            enterMethod(methodName) {
+                this.connection.send({ type: 'processFlow', flowType: 'enterMethod', title: methodName });
+            }
+
+            leaveMethod(methodName) {
+                this.connection.send({ type: 'processFlow', flowType: 'leaveMethod', title: methodName });
+            }
+
+            _log(type, title, data, color) {
+                const dataStr = data !== undefined ? (typeof data === 'string' ? data : JSON.stringify(data, null, 2)) : undefined;
+                this._sendLogEntry(type, title, dataStr, dataStr ? 'data' : undefined, color);
+            }
+
+            _sendLogEntry(type, title, data, viewerId, color) {
+                this.connection.send({
+                    type: 'logEntry',
+                    logEntryType: type,
+                    session: this.name,
+                    appName: this.appName,
+                    title,
+                    data,
+                    viewerId,
+                    color
+                });
+            }
+        }
+
+        class SmartInspect {
+            constructor(appName) {
+                this.appName = appName;
+                this.connection = new WebSocketConnection();
+                this.sessions = new Map();
+            }
+
+            get connectionState() { return this.connection.connectionState; }
+            get isConnected() { return this.connection.isConnected; }
+            set events(handlers) { this.connection.events = handlers; }
+
+            async connect(url = 'ws://localhost:4229') {
+                return this.connection.connect(url);
+            }
+
+            disconnect() {
+                this.connection.disconnect();
+            }
+
+            addSession(name) {
+                if (!this.sessions.has(name)) {
+                    this.sessions.set(name, new Session(this.connection, name, this.appName));
+                }
+                return this.sessions.get(name);
+            }
+
+            get mainSession() { return this.addSession('Main'); }
+
+            clearLog() { this.connection.send({ type: 'control', command: 'clearLog' }); }
+            clearWatches() { this.connection.send({ type: 'control', command: 'clearWatches' }); }
+            clearAll() { this.connection.send({ type: 'control', command: 'clearAll' }); }
+        }
+
+        // Create global instance
+        const si = new SmartInspect('Browser App');
+        window.si = si;
+        window.main = si.mainSession;
+
+        // State management
+        let counter = 0;
+        let isToggled = false;
+        window.counter = counter;
+
+        // Connection handling
+        window.toggleConnection = async function() {
+            const btn = document.getElementById('connectBtn');
+            const urlInput = document.getElementById('wsUrl');
+
+            if (si.isConnected) {
+                si.disconnect();
+            } else {
+                btn.disabled = true;
+                btn.textContent = 'Connecting...';
+
+                try {
+                    await si.connect(urlInput.value);
+                    log('Connected to SmartInspect Console', 'info');
+                } catch (e) {
+                    log('Failed to connect: ' + e.message, 'error');
+                } finally {
+                    btn.disabled = false;
+                    updateUI();
+                }
+            }
+        };
+
+        // Event handlers
+        si.events = {
+            onStateChange: (state) => {
+                const status = document.getElementById('status');
+                status.className = state;
+                status.textContent = state.charAt(0).toUpperCase() + state.slice(1);
+                updateUI();
+            }
+        };
+
+        function updateUI() {
+            const btn = document.getElementById('connectBtn');
+            btn.textContent = si.isConnected ? 'Disconnect' : 'Connect';
+        }
+
+        // Logging functions
+        window.logMessage = () => { main.logMessage('Hello from the browser!'); log('Sent: logMessage'); };
+        window.logWarning = () => { main.logWarning('This is a warning'); log('Sent: logWarning', 'warn'); };
+        window.logError = () => { main.logError('This is an error'); log('Sent: logError', 'error'); };
+        window.logDebug = () => { main.logDebug('Debug information'); log('Sent: logDebug'); };
+        window.logSeparator = () => { main.logSeparator('Section Break'); log('Sent: separator'); };
+
+        window.logObject = () => {
+            const user = { id: 1, name: 'John Doe', email: 'john@example.com', roles: ['admin', 'user'] };
+            main.logObject('User Object', user);
+            log('Sent: logObject');
+        };
+
+        window.logJson = () => {
+            const data = { status: 'success', count: 42, items: [1, 2, 3] };
+            main.logJson('JSON Data', data);
+            log('Sent: logJson');
+        };
+
+        window.logException = () => {
+            try {
+                throw new Error('Something went wrong!');
+            } catch (e) {
+                main.logException('Caught Exception', e);
+                log('Sent: logException', 'error');
+            }
+        };
+
+        window.logArray = () => {
+            const items = ['Apple', 'Banana', 'Cherry', 'Date'];
+            main.logObject('Fruit Array', items);
+            log('Sent: array');
+        };
+
+        // Watches
+        window.watchCounter = () => {
+            counter++;
+            main.watch('counter', counter);
+            log('Sent: watch counter = ' + counter);
+        };
+
+        window.watchBoolean = () => {
+            isToggled = !isToggled;
+            main.watch('isToggled', isToggled);
+            log('Sent: watch isToggled = ' + isToggled);
+        };
+
+        window.watchObject = () => {
+            const state = { counter, isToggled, timestamp: new Date().toISOString() };
+            main.watch('appState', state);
+            log('Sent: watch appState');
+        };
+
+        // Process Flow
+        window.trackMethod = () => {
+            main.enterMethod('handleButtonClick');
+            setTimeout(() => {
+                main.leaveMethod('handleButtonClick');
+                log('Sent: method tracking');
+            }, 100);
+        };
+
+        window.nestedMethods = () => {
+            main.enterMethod('processData');
+            main.enterMethod('validateInput');
+            main.leaveMethod('validateInput');
+            main.enterMethod('transformData');
+            main.leaveMethod('transformData');
+            main.leaveMethod('processData');
+            log('Sent: nested methods');
+        };
+
+        // Control
+        window.clearLog = () => { si.clearLog(); log('Sent: clearLog'); };
+        window.clearWatches = () => { si.clearWatches(); log('Sent: clearWatches'); };
+        window.clearAll = () => { si.clearAll(); log('Sent: clearAll'); };
+
+        // Console output
+        function log(message, type = 'info') {
+            const output = document.getElementById('output');
+            const line = document.createElement('div');
+            line.className = 'log-line log-' + type;
+            line.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+            output.appendChild(line);
+            output.scrollTop = output.scrollHeight;
+        }
+
+        log('SmartInspect JS ready. Click Connect to start logging.');
+    </script>
+</body>
+</html>

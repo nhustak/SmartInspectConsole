@@ -5,7 +5,7 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         mc:Ignorable="d"
         Title="Settings"
-        Height="310" Width="420"
+        Height="400" Width="420"
         WindowStartupLocation="CenterOwner"
         ResizeMode="NoResize"
         ShowInTaskbar="False"
@@ -59,6 +59,8 @@
                         <RowDefinition Height="Auto"/>
                         <RowDefinition Height="8"/>
                         <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="8"/>
+                        <RowDefinition Height="Auto"/>
                         <RowDefinition Height="Auto"/>
                     </Grid.RowDefinitions>
 
@@ -74,7 +76,13 @@
                              ToolTip="Named pipe name (default: smartinspect)"/>
                     <Button Grid.Column="2" Grid.Row="2" Content="Default" Click="DefaultPipe_Click" Padding="8,4"/>
 
-                    <TextBlock Grid.Column="0" Grid.ColumnSpan="3" Grid.Row="3"
+                    <Label Grid.Column="0" Grid.Row="4" Content="WebSocket Port:" VerticalAlignment="Center"/>
+                    <TextBox Grid.Column="1" Grid.Row="4" x:Name="WebSocketPortTextBox"
+                             Width="120" HorizontalAlignment="Left"
+                             ToolTip="WebSocket port for browser clients (default: 4229)"/>
+                    <Button Grid.Column="2" Grid.Row="4" Content="Default" Click="DefaultWebSocket_Click" Padding="8,4"/>
+
+                    <TextBlock Grid.Column="0" Grid.ColumnSpan="3" Grid.Row="5"
                                Margin="0,8,0,0"
                                Foreground="{DynamicResource ForegroundSecondaryBrush}"
                                FontSize="11"
@@ -82,6 +90,12 @@
                         Note: Changes require stopping and restarting the listeners.
                     </TextBlock>
                 </Grid>
+            </GroupBox>
+
+            <!-- Developer Settings -->
+            <GroupBox Header="Developer">
+                <CheckBox x:Name="DebugModeCheckBox" Content="Enable debug logging (logs internal console messages)"
+                          Foreground="{DynamicResource ForegroundBrush}"/>
             </GroupBox>
 
             <!-- Info -->
@@ -92,7 +106,7 @@
                     <TextBlock TextWrapping="Wrap" Foreground="#1565C0" FontSize="12">
                         <Run FontWeight="Bold">SmartInspect Defaults:</Run>
                         <LineBreak/>
-                        TCP Port: 4228 | Named Pipe: smartinspect
+                        TCP: 4228 | Pipe: smartinspect | WebSocket: 4229
                     </TextBlock>
                 </StackPanel>
             </Border>
