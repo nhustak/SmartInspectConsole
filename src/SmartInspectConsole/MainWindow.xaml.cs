@@ -1,3 +1,4 @@
+using System.Reflection;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -5,6 +6,7 @@ using Microsoft.Win32;
 using SmartInspectConsole.Core.Packets;
 using SmartInspectConsole.Services;
 using SmartInspectConsole.ViewModels;
+using SmartInspectConsole.Views;
 
 namespace SmartInspectConsole;
 
@@ -60,11 +62,22 @@ public partial class MainWindow : Window
 
     private void About_Click(object sender, RoutedEventArgs e)
     {
+        var assembly = Assembly.GetExecutingAssembly();
+        var version = assembly.GetName().Version?.ToString() ?? "Unknown";
+        var informationalVersion = assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion;
+        var displayVersion = informationalVersion ?? version;
+
         MessageBox.Show(
-            "SmartInspect Console\n\nA replacement console for SmartInspectCore logging.\n\nVersion 1.0",
+            $"SmartInspect Console\n\nA replacement console for SmartInspectCore logging.\n\nVersion {displayVersion}",
             "About",
             MessageBoxButton.OK,
             MessageBoxImage.Information);
+    }
+
+    private void IconLegend_Click(object sender, RoutedEventArgs e)
+    {
+        var dialog = new IconLegendDialog { Owner = this };
+        dialog.ShowDialog();
     }
 
     private void DarkTheme_Click(object sender, RoutedEventArgs e)
@@ -79,6 +92,38 @@ public partial class MainWindow : Window
         App.IsDarkTheme = false;
         DarkThemeMenuItem.IsChecked = false;
         LightThemeMenuItem.IsChecked = true;
+    }
+
+    private async void Settings_Click(object sender, RoutedEventArgs e)
+    {
+        var dialog = new SettingsDialog(_viewModel.TcpPort, _viewModel.PipeName)
+        {
+            Owner = this
+        };
+
+        if (dialog.ShowDialog() == true)
+        {
+            var portChanged = dialog.TcpPort != _viewModel.TcpPort;
+            var pipeChanged = dialog.PipeName != _viewModel.PipeName;
+
+            if (portChanged || pipeChanged)
+            {
+                var wasListening = _viewModel.IsListening;
+
+                if (wasListening)
+                {
+                    await _viewModel.StopAsync();
+                }
+
+                _viewModel.TcpPort = dialog.TcpPort;
+                _viewModel.PipeName = dialog.PipeName;
+
+                if (wasListening)
+                {
+                    await _viewModel.StartAsync();
+                }
+            }
+        }
     }
 
     private void ExportLayout_Click(object sender, RoutedEventArgs e)

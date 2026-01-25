@@ -7,6 +7,7 @@
         xmlns:vm="clr-namespace:SmartInspectConsole.ViewModels"
         xmlns:conv="clr-namespace:SmartInspectConsole.Converters"
         xmlns:views="clr-namespace:SmartInspectConsole.Views"
+        xmlns:behaviors="clr-namespace:SmartInspectConsole.Behaviors"
         mc:Ignorable="d"
         Title="SmartInspect Console"
         Height="800" Width="1200"
@@ -16,10 +17,12 @@
 
     <Window.Resources>
         <conv:LogEntryTypeToIconConverter x:Key="LogEntryTypeToIconConverter"/>
+        <conv:LogEntryTypeToColorConverter x:Key="LogEntryTypeToColorConverter"/>
         <conv:ColorToBrushConverter x:Key="ColorToBrushConverter"/>
         <conv:BoolToVisibilityConverter x:Key="BoolToVisibilityConverter"/>
         <conv:BoolToGridLengthConverter x:Key="BoolToGridLengthConverter"/>
         <conv:BoolToColumnWidthConverter x:Key="BoolToColumnWidthConverter"/>
+        <conv:LogEntryToIsSeparatorConverter x:Key="LogEntryToIsSeparatorConverter"/>
 
         <!-- Local styles that use DynamicResource for theme switching -->
         <Style TargetType="GroupBox">
@@ -63,12 +66,6 @@
             <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}"/>
             <Setter Property="CaretBrush" Value="{DynamicResource ForegroundBrush}"/>
             <Setter Property="Padding" Value="4,2"/>
-        </Style>
-
-        <Style TargetType="ComboBox">
-            <Setter Property="Background" Value="{DynamicResource SurfaceBrush}"/>
-            <Setter Property="Foreground" Value="{DynamicResource ForegroundBrush}"/>
-            <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}"/>
         </Style>
 
         <Style TargetType="TextBlock">
@@ -197,7 +194,12 @@
                     <MenuItem Header="_Light Theme" Click="LightTheme_Click" IsCheckable="True" x:Name="LightThemeMenuItem"/>
                 </MenuItem>
             </MenuItem>
+            <MenuItem Header="_Tools">
+                <MenuItem Header="_Settings..." Click="Settings_Click"/>
+            </MenuItem>
             <MenuItem Header="_Help">
+                <MenuItem Header="_Icon Legend..." Click="IconLegend_Click"/>
+                <Separator/>
                 <MenuItem Header="_About" Click="About_Click"/>
             </MenuItem>
         </Menu>
@@ -272,8 +274,10 @@
                             <MenuItem Header="Duplicate View" Command="{Binding DuplicateViewCommand}" CommandParameter="{Binding SelectedView}"/>
                             <MenuItem Header="Remove View" Command="{Binding RemoveViewCommand}" CommandParameter="{Binding SelectedView}"/>
                             <Separator/>
-                            <MenuItem Header="Clear Log" Command="{Binding ClearLogCommand}"/>
-                            <MenuItem Header="Clear All" Command="{Binding ClearAllCommand}"/>
+                            <MenuItem Header="Clear View Log" Command="{Binding ClearViewLogCommand}" CommandParameter="{Binding SelectedView}"
+                                      ToolTip="Clear only the log entries visible in this view"/>
+                            <MenuItem Header="Clear All Logs" Command="{Binding ClearLogCommand}"
+                                      ToolTip="Clear all log entries from all views"/>
                             <Separator/>
                             <MenuItem Header="Show Panels">
                                 <MenuItem Header="Watches" IsCheckable="True" IsChecked="{Binding ShowWatchesPanel}"/>
@@ -308,7 +312,8 @@
                                         Margin="2,0,0,0"
                                         FontSize="10"
                                         VerticalAlignment="Center"
-                                        ToolTip="Close View"/>
+                                        ToolTip="Close View"
+                                        Visibility="{Binding CanClose, Converter={StaticResource BoolToVisibilityConverter}}"/>
                             </StackPanel>
                         </DataTemplate>
                     </TabControl.ItemTemplate>
@@ -341,7 +346,7 @@
                                             <TextBox Width="150" Text="{Binding TextFilter, UpdateSourceTrigger=PropertyChanged}"
                                                      ToolTip="Filter by title or data content"/>
                                         </StackPanel>
-                                        <StackPanel Orientation="Horizontal">
+                                        <StackPanel Orientation="Horizontal" Margin="0,0,16,0">
                                             <TextBlock Text="Level:" VerticalAlignment="Center" Margin="0,0,4,0"/>
                                             <ComboBox Width="100"
                                                       ItemsSource="{Binding LogLevels}"
@@ -349,6 +354,16 @@
                                                       DisplayMemberPath="DisplayName"
                                                       ToolTip="Minimum log level"/>
                                         </StackPanel>
+                                        <ToggleButton IsChecked="{Binding AutoScroll}"
+                                                      ToolTip="Auto-scroll to newest entries"
+                                                      Padding="8,4"
+                                                      Background="{DynamicResource SurfaceBrush}"
+                                                      BorderBrush="{DynamicResource BorderBrush}">
+                                            <StackPanel Orientation="Horizontal">
+                                                <TextBlock Text="&#x2193;" FontSize="12" Margin="0,0,4,0"/>
+                                                <TextBlock Text="Auto"/>
+                                            </StackPanel>
+                                        </ToggleButton>
                                     </WrapPanel>
                                 </Border>
 
@@ -359,14 +374,17 @@
                                           VirtualizingPanel.IsVirtualizing="True"
                                           VirtualizingPanel.VirtualizationMode="Recycling"
                                           ScrollViewer.CanContentScroll="True"
-                                          MouseDoubleClick="LogEntryList_MouseDoubleClick">
+                                          MouseDoubleClick="LogEntryList_MouseDoubleClick"
+                                          behaviors:AutoScrollBehavior.AutoScroll="{Binding AutoScroll}">
                                     <ListView.View>
                                         <GridView>
                                             <GridViewColumn Header="" Width="30">
                                                 <GridViewColumn.CellTemplate>
                                                     <DataTemplate>
                                                         <TextBlock Text="{Binding LogEntryType, Converter={StaticResource LogEntryTypeToIconConverter}}"
-                                                                   FontSize="14"/>
+                                                                   Foreground="{Binding LogEntryType, Converter={StaticResource LogEntryTypeToColorConverter}}"
+                                                                   FontSize="14"
+                                                                   ToolTip="{Binding LogEntryType}"/>
                                                     </DataTemplate>
                                                 </GridViewColumn.CellTemplate>
                                             </GridViewColumn>
@@ -383,8 +401,28 @@
                                                             Width="{Binding ShowSessionColumn, Converter={StaticResource BoolToColumnWidthConverter}, ConverterParameter=80}"
                                                             DisplayMemberBinding="{Binding SessionName}"/>
                                             <GridViewColumn Header="Title"
-                                                            Width="{Binding ShowTitleColumn, Converter={StaticResource BoolToColumnWidthConverter}, ConverterParameter=350}"
-                                                            DisplayMemberBinding="{Binding Title}"/>
+                                                            Width="{Binding ShowTitleColumn, Converter={StaticResource BoolToColumnWidthConverter}, ConverterParameter=350}">
+                                                <GridViewColumn.CellTemplate>
+                                                    <DataTemplate>
+                                                        <Grid>
+                                                            <!-- Normal title text -->
+                                                            <TextBlock Text="{Binding Title}"
+                                                                       Visibility="{Binding LogEntryType, Converter={StaticResource LogEntryToIsSeparatorConverter}, ConverterParameter=invert}"/>
+                                                            <!-- Separator line -->
+                                                            <Grid Visibility="{Binding LogEntryType, Converter={StaticResource LogEntryToIsSeparatorConverter}}">
+                                                                <Grid.ColumnDefinitions>
+                                                                    <ColumnDefinition Width="*"/>
+                                                                    <ColumnDefinition Width="Auto"/>
+                                                                    <ColumnDefinition Width="*"/>
+                                                                </Grid.ColumnDefinitions>
+                                                                <Rectangle Grid.Column="0" Height="1" Fill="{DynamicResource BorderBrush}" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                                                                <TextBlock Grid.Column="1" Text="{Binding Title}" Foreground="{DynamicResource ForegroundSecondaryBrush}" FontStyle="Italic" VerticalAlignment="Center"/>
+                                                                <Rectangle Grid.Column="2" Height="1" Fill="{DynamicResource BorderBrush}" VerticalAlignment="Center" Margin="8,0,0,0"/>
+                                                            </Grid>
+                                                        </Grid>
+                                                    </DataTemplate>
+                                                </GridViewColumn.CellTemplate>
+                                            </GridViewColumn>
                                             <GridViewColumn Header="Thread"
                                                             Width="{Binding ShowThreadColumn, Converter={StaticResource BoolToColumnWidthConverter}, ConverterParameter=50}"
                                                             DisplayMemberBinding="{Binding ThreadId}"/>

@@ -17,8 +17,8 @@ namespace SmartInspectConsole.ViewModels;
 /// </summary>
 public class MainViewModel : ViewModelBase, IDisposable
 {
-    private readonly SmartInspectTcpListener _tcpListener;
-    private readonly SmartInspectPipeListener _pipeListener;
+    private SmartInspectTcpListener? _tcpListener;
+    private SmartInspectPipeListener? _pipeListener;
     private readonly object _logEntriesLock = new();
 
     private DateTime? _lastLogEntryTimestamp;
@@ -33,22 +33,12 @@ public class MainViewModel : ViewModelBase, IDisposable
     private bool _showProcessFlowPanel = true;
     private bool _showDetailsPanel = true;
 
+    // Network settings
+    private int _tcpPort = SmartInspectTcpListener.DefaultPort;
+    private string _pipeName = SmartInspectPipeListener.DefaultPipeName;
+
     public MainViewModel()
     {
-        _tcpListener = new SmartInspectTcpListener();
-        _pipeListener = new SmartInspectPipeListener();
-
-        // Wire up events
-        _tcpListener.PacketReceived += OnPacketReceived;
-        _tcpListener.ClientConnected += OnClientConnected;
-        _tcpListener.ClientDisconnected += OnClientDisconnected;
-        _tcpListener.Error += OnError;
-
-        _pipeListener.PacketReceived += OnPacketReceived;
-        _pipeListener.ClientConnected += OnClientConnected;
-        _pipeListener.ClientDisconnected += OnClientDisconnected;
-        _pipeListener.Error += OnError;
-
         // Initialize collections
         LogEntries = new ObservableCollection<LogEntry>();
         Watches = new ObservableCollection<Watch>();
@@ -63,8 +53,8 @@ public class MainViewModel : ViewModelBase, IDisposable
         BindingOperations.EnableCollectionSynchronization(Views, _logEntriesLock);
         BindingOperations.EnableCollectionSynchronization(DetailTabs, _logEntriesLock);
 
-        // Create default "All" view
-        var allView = new LogViewViewModel(LogEntries, _logEntriesLock, "All");
+        // Create default "All" view (primary view that cannot be closed)
+        var allView = new LogViewViewModel(LogEntries, _logEntriesLock, "All", isPrimaryView: true);
         Views.Add(allView);
         SelectedView = allView;
 
@@ -91,6 +81,9 @@ public class MainViewModel : ViewModelBase, IDisposable
         // Detail tab commands
         OpenLogEntryDetailCommand = new RelayCommand<LogEntry>(OpenLogEntryDetail);
         CloseDetailTabCommand = new RelayCommand<LogEntryDetailViewModel>(CloseDetailTab);
+
+        // View-specific commands
+        ClearViewLogCommand = new RelayCommand<LogViewViewModel>(ClearViewLog);
     }
 
     #region Properties
@@ -153,13 +146,13 @@ public class MainViewModel : ViewModelBase, IDisposable
         }
     }
 
-    public string TcpStatus => IsListening
-        ? $"TCP: Port {SmartInspectTcpListener.DefaultPort} ({_tcpListener.ClientCount} clients)"
-        : "TCP: Stopped";
+    public string TcpStatus => IsListening && _tcpListener != null
+        ? $"TCP: Port {_tcpPort} ({_tcpListener.ClientCount} clients)"
+        : $"TCP: Port {_tcpPort} (Stopped)";
 
-    public string PipeStatus => IsListening
-        ? $"Pipe: {_pipeListener.PipeName} ({_pipeListener.ClientCount} clients)"
-        : "Pipe: Stopped";
+    public string PipeStatus => IsListening && _pipeListener != null
+        ? $"Pipe: {_pipeName} ({_pipeListener.ClientCount} clients)"
+        : $"Pipe: {_pipeName} (Stopped)";
 
     public int EntryCount => LogEntries.Count;
 
@@ -180,6 +173,30 @@ public class MainViewModel : ViewModelBase, IDisposable
     {
         get => _showDetailsPanel;
         set => SetProperty(ref _showDetailsPanel, value);
+    }
+
+    public int TcpPort
+    {
+        get => _tcpPort;
+        set
+        {
+            if (SetProperty(ref _tcpPort, value))
+            {
+                OnPropertyChanged(nameof(TcpStatus));
+            }
+        }
+    }
+
+    public string PipeName
+    {
+        get => _pipeName;
+        set
+        {
+            if (SetProperty(ref _pipeName, value))
+            {
+                OnPropertyChanged(nameof(PipeStatus));
+            }
+        }
     }
 
     #endregion
@@ -209,6 +226,9 @@ public class MainViewModel : ViewModelBase, IDisposable
     public ICommand OpenLogEntryDetailCommand { get; }
     public ICommand CloseDetailTabCommand { get; }
 
+    // View-specific
+    public ICommand ClearViewLogCommand { get; }
+
     #endregion
 
     #region Public Methods
@@ -220,6 +240,45 @@ public class MainViewModel : ViewModelBase, IDisposable
         try
         {
             StatusText = "Starting listeners...";
+
+            // Clean up old listeners asynchronously (avoid blocking Dispose on UI thread)
+            var cleanupTasks = new List<Task>();
+            if (_tcpListener != null)
+            {
+                _tcpListener.PacketReceived -= OnPacketReceived;
+                _tcpListener.ClientConnected -= OnClientConnected;
+                _tcpListener.ClientDisconnected -= OnClientDisconnected;
+                _tcpListener.Error -= OnError;
+                cleanupTasks.Add(_tcpListener.StopAsync());
+            }
+            if (_pipeListener != null)
+            {
+                _pipeListener.PacketReceived -= OnPacketReceived;
+                _pipeListener.ClientConnected -= OnClientConnected;
+                _pipeListener.ClientDisconnected -= OnClientDisconnected;
+                _pipeListener.Error -= OnError;
+                cleanupTasks.Add(_pipeListener.StopAsync());
+            }
+            if (cleanupTasks.Count > 0)
+            {
+                await Task.WhenAll(cleanupTasks);
+                // Brief delay to allow Windows to fully release resources (ports/pipes)
+                await Task.Delay(100);
+            }
+
+            // Create TCP listener with configured port
+            _tcpListener = new SmartInspectTcpListener(_tcpPort);
+            _tcpListener.PacketReceived += OnPacketReceived;
+            _tcpListener.ClientConnected += OnClientConnected;
+            _tcpListener.ClientDisconnected += OnClientDisconnected;
+            _tcpListener.Error += OnError;
+
+            // Create pipe listener with configured name
+            _pipeListener = new SmartInspectPipeListener(_pipeName);
+            _pipeListener.PacketReceived += OnPacketReceived;
+            _pipeListener.ClientConnected += OnClientConnected;
+            _pipeListener.ClientDisconnected += OnClientDisconnected;
+            _pipeListener.Error += OnError;
 
             await Task.WhenAll(
                 _tcpListener.StartAsync(),
@@ -244,9 +303,13 @@ public class MainViewModel : ViewModelBase, IDisposable
         {
             StatusText = "Stopping listeners...";
 
-            await Task.WhenAll(
-                _tcpListener.StopAsync(),
-                _pipeListener.StopAsync());
+            var tasks = new List<Task>();
+            if (_tcpListener != null)
+                tasks.Add(_tcpListener.StopAsync());
+            if (_pipeListener != null)
+                tasks.Add(_pipeListener.StopAsync());
+
+            await Task.WhenAll(tasks);
 
             IsListening = false;
             StatusText = "Stopped";
@@ -271,13 +334,22 @@ public class MainViewModel : ViewModelBase, IDisposable
 
     private bool CanRemoveView(LogViewViewModel? view)
     {
-        // Can't remove if it's the last view
-        return view != null && Views.Count > 1;
+        // Can't remove if it's the primary view or if it's the last view
+        return view != null && !view.IsPrimaryView && Views.Count > 1;
     }
 
     private void RemoveView(LogViewViewModel? view)
     {
-        if (view == null || Views.Count <= 1) return;
+        if (view == null || view.IsPrimaryView || Views.Count <= 1) return;
+
+        // Show confirmation dialog
+        var result = MessageBox.Show(
+            $"Are you sure you want to close the view \"{view.Name}\"?",
+            "Close View",
+            MessageBoxButton.YesNo,
+            MessageBoxImage.Question);
+
+        if (result != MessageBoxResult.Yes) return;
 
         var index = Views.IndexOf(view);
         Views.Remove(view);
@@ -330,6 +402,21 @@ public class MainViewModel : ViewModelBase, IDisposable
         {
             editViewModel.SaveTo(view);
         }
+    }
+
+    private void ClearViewLog(LogViewViewModel? view)
+    {
+        if (view == null) return;
+
+        view.ClearFilteredEntries();
+
+        // Update all views since we modified the shared collection
+        foreach (var v in Views)
+        {
+            v.RefreshFilter();
+        }
+
+        OnPropertyChanged(nameof(EntryCount));
     }
 
     #endregion
@@ -605,6 +692,10 @@ public class MainViewModel : ViewModelBase, IDisposable
         state.ShowProcessFlowPanel = ShowProcessFlowPanel;
         state.ShowDetailsPanel = ShowDetailsPanel;
 
+        // Network settings
+        state.TcpPort = TcpPort;
+        state.PipeName = PipeName;
+
         // Views
         state.Views.Clear();
         foreach (var view in Views)
@@ -626,15 +717,22 @@ public class MainViewModel : ViewModelBase, IDisposable
         ShowProcessFlowPanel = state.ShowProcessFlowPanel;
         ShowDetailsPanel = state.ShowDetailsPanel;
 
+        // Network settings
+        TcpPort = state.TcpPort > 0 ? state.TcpPort : SmartInspectTcpListener.DefaultPort;
+        PipeName = !string.IsNullOrWhiteSpace(state.PipeName) ? state.PipeName : SmartInspectPipeListener.DefaultPipeName;
+
         // Restore views if any saved
         if (state.Views.Count > 0)
         {
             Views.Clear();
+            var isFirst = true;
             foreach (var viewState in state.Views)
             {
-                var view = new LogViewViewModel(LogEntries, _logEntriesLock, viewState.Name);
+                // First view is always the primary view that cannot be closed
+                var view = new LogViewViewModel(LogEntries, _logEntriesLock, viewState.Name, isPrimaryView: isFirst);
                 ApplyViewState(view, viewState);
                 Views.Add(view);
+                isFirst = false;
             }
 
             // Restore selected view
@@ -677,7 +775,8 @@ public class MainViewModel : ViewModelBase, IDisposable
             ShowAppColumn = view.ShowAppColumn,
             ShowSessionColumn = view.ShowSessionColumn,
             ShowTitleColumn = view.ShowTitleColumn,
-            ShowThreadColumn = view.ShowThreadColumn
+            ShowThreadColumn = view.ShowThreadColumn,
+            AutoScroll = view.AutoScroll
         };
     }
 
@@ -722,6 +821,7 @@ public class MainViewModel : ViewModelBase, IDisposable
         view.ShowSessionColumn = state.ShowSessionColumn;
         view.ShowTitleColumn = state.ShowTitleColumn;
         view.ShowThreadColumn = state.ShowThreadColumn;
+        view.AutoScroll = state.AutoScroll;
     }
 
     #endregion
@@ -730,8 +830,8 @@ public class MainViewModel : ViewModelBase, IDisposable
 
     public void Dispose()
     {
-        _tcpListener.Dispose();
-        _pipeListener.Dispose();
+        _tcpListener?.Dispose();
+        _pipeListener?.Dispose();
     }
 
     #endregion

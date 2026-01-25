@@ -37,6 +37,10 @@ public class AppState
     public bool ShowProcessFlowPanel { get; set; } = true;
     public bool ShowDetailsPanel { get; set; } = true;
 
+    // Network settings
+    public int TcpPort { get; set; } = 4228;
+    public string PipeName { get; set; } = "smartinspect";
+
     // Views configuration
     public List<ViewState> Views { get; set; } = new();
 
@@ -207,4 +211,7 @@ public class ViewState
     public bool ShowSessionColumn { get; set; } = true;
     public bool ShowTitleColumn { get; set; } = true;
     public bool ShowThreadColumn { get; set; } = true;
+
+    // Auto-scroll
+    public bool AutoScroll { get; set; } = true;
 }

@@ -52,11 +52,18 @@ public class LogViewViewModel : ViewModelBase
     private bool _showTitleColumn = true;
     private bool _showThreadColumn = true;
 
-    public LogViewViewModel(ObservableCollection<LogEntry> allLogEntries, object lockObject, string name = "View")
+    // Primary view flag
+    private bool _isPrimaryView;
+
+    // Auto-scroll flag
+    private bool _autoScroll = true;
+
+    public LogViewViewModel(ObservableCollection<LogEntry> allLogEntries, object lockObject, string name = "View", bool isPrimaryView = false)
     {
         _allLogEntries = allLogEntries;
         _lockObject = lockObject;
         _name = name;
+        _isPrimaryView = isPrimaryView;
 
         // Create a filtered view of the shared log entries
         FilteredLogEntries = CollectionViewSource.GetDefaultView(_allLogEntries);
@@ -83,6 +90,29 @@ public class LogViewViewModel : ViewModelBase
     {
         get => _name;
         set => SetProperty(ref _name, value);
+    }
+
+    /// <summary>
+    /// Indicates if this is the primary/default view that cannot be closed.
+    /// </summary>
+    public bool IsPrimaryView
+    {
+        get => _isPrimaryView;
+        set => SetProperty(ref _isPrimaryView, value);
+    }
+
+    /// <summary>
+    /// Returns true if this view can be closed (non-primary views).
+    /// </summary>
+    public bool CanClose => !_isPrimaryView;
+
+    /// <summary>
+    /// When enabled, the log list automatically scrolls to show the newest entries.
+    /// </summary>
+    public bool AutoScroll
+    {
+        get => _autoScroll;
+        set => SetProperty(ref _autoScroll, value);
     }
 
     public string AppNameFilter
@@ -568,6 +598,25 @@ public class LogViewViewModel : ViewModelBase
 
     public void Clear()
     {
+        OnPropertyChanged(nameof(FilteredCount));
+    }
+
+    /// <summary>
+    /// Clears only the log entries that are currently visible in this view's filter.
+    /// </summary>
+    public void ClearFilteredEntries()
+    {
+        // Get all entries that pass the current filter
+        var entriesToRemove = _allLogEntries.Where(e => FilterLogEntry(e)).ToList();
+
+        lock (_lockObject)
+        {
+            foreach (var entry in entriesToRemove)
+            {
+                _allLogEntries.Remove(entry);
+            }
+        }
+
         OnPropertyChanged(nameof(FilteredCount));
     }
 

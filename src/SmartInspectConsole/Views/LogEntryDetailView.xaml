@@ -99,13 +99,14 @@
                         <ColumnDefinition Width="Auto"/>
                     </Grid.ColumnDefinitions>
 
-                    <StackPanel Grid.Column="0" Orientation="Horizontal">
+                    <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
                         <TextBlock Text="Data" FontWeight="SemiBold" VerticalAlignment="Center"/>
-                        <Border Background="{DynamicResource AccentBrush}" CornerRadius="3"
+                        <Border Background="{DynamicResource BorderBrush}" CornerRadius="3"
                                 Padding="6,2" Margin="8,0,0,0"
+                                VerticalAlignment="Center"
                                 Visibility="{Binding HasData, Converter={StaticResource BoolToVisibilityConverter}}">
                             <TextBlock Text="{Binding DetectedFormat}" FontSize="11"
-                                       Foreground="White"/>
+                                       Foreground="{DynamicResource ForegroundBrush}"/>
                         </Border>
                         <TextBlock Text="{Binding DataSize, StringFormat=' ({0} bytes)'}"
                                    Foreground="{DynamicResource ForegroundSecondaryBrush}"
@@ -113,9 +114,18 @@
                     </StackPanel>
 
                     <StackPanel Grid.Column="1" Orientation="Horizontal">
-                        <CheckBox Content="Format" IsChecked="{Binding IsFormatted}"
-                                  VerticalAlignment="Center" Margin="0,0,8,0"
-                                  Foreground="{DynamicResource ForegroundBrush}"/>
+                        <ComboBox ItemsSource="{Binding FormatOptions}"
+                                  SelectedItem="{Binding SelectedFormat}"
+                                  DisplayMemberPath="Name"
+                                  Width="110" Margin="0,0,8,0"
+                                  VerticalAlignment="Center"/>
+                        <Button Command="{Binding CopyDataCommand}"
+                                ToolTip="Copy formatted data to clipboard"
+                                Padding="6,4"
+                                Background="{DynamicResource SurfaceBrush}"
+                                BorderBrush="{DynamicResource BorderBrush}">
+                            <TextBlock Text="Copy"/>
+                        </Button>
                     </StackPanel>
                 </Grid>
             </Border>
