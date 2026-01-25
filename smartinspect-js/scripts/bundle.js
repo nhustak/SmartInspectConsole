@@ -19,7 +19,7 @@ async function bundle() {
   // UMD/IIFE bundle for browsers
   await esbuild.build({
     ...common,
-    outfile: 'dist/smartinspect.js',
+    outfile: 'dist/smartinspect.umd.js',
     format: 'iife',
     globalName: 'SmartInspectJS',
   });

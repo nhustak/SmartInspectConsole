@@ -1,15 +1,15 @@
 {
   "name": "smartinspect-js",
-  "version": "2026.1.25.0",
+  "version": "1.0.0",
   "description": "SmartInspect logging client for browser-based JavaScript/TypeScript applications",
-  "main": "dist/smartinspect.js",
+  "main": "dist/smartinspect.umd.js",
   "module": "dist/smartinspect.esm.js",
-  "types": "dist/smartinspect.d.ts",
+  "types": "dist/index.d.ts",
   "exports": {
     ".": {
       "import": "./dist/smartinspect.esm.js",
-      "require": "./dist/smartinspect.js",
-      "types": "./dist/smartinspect.d.ts"
+      "require": "./dist/smartinspect.umd.js",
+      "types": "./dist/index.d.ts"
     }
   },
   "files": [
@@ -26,10 +26,21 @@
     "logging",
     "debug",
     "browser",
-    "typescript"
+    "typescript",
+    "websocket",
+    "real-time"
   ],
-  "author": "",
+  "author": "Nick Hustak",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/nhustak/SmartInspectConsole.git",
+    "directory": "smartinspect-js"
+  },
+  "bugs": {
+    "url": "https://github.com/nhustak/SmartInspectConsole/issues"
+  },
+  "homepage": "https://github.com/nhustak/SmartInspectConsole/tree/master/smartinspect-js#readme",
   "devDependencies": {
     "typescript": "^5.0.0",
     "esbuild": "^0.20.0"

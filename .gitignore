@@ -32,3 +32,7 @@ Desktop.ini
 # User-specific
 *.nul
 nul
+
+# Node.js (smartinspect-js)
+node_modules/
+smartinspect-js/dist/

@@ -1,6 +1,6 @@
 # SmartInspect Console
 
-**Version 2026.1.25.1**
+**Version 1.0.0**
 
 A WPF-based replacement console for receiving and displaying real-time logging data from SmartInspectCore logging system.
 
