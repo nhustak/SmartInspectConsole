@@ -1,6 +1,6 @@
 # SmartInspect Console
 
-**Version 2026.1.24.0**
+**Version 2026.1.24.1**
 
 A WPF-based replacement console for receiving and displaying real-time logging data from SmartInspectCore applications.
 
@@ -10,6 +10,8 @@ I've been using SmartInspect for a looooonnngggg time.  I found it way back in m
 I still use it, despite the fact it hasn't had a refresh in...lord...20 years?   A company bought it recently and were supposedly working on it.
 I was waiting to see - the console was never really finished and sucks.
 Well I got tired of it...and realized Claude could help me here.
+
+Yes, the code in this project is 100% Claude Code.
 
 So here we go - if you use SmartInspect, you should love this.   I have no idea if I'm breaking copyright here.  If I am, well they can give me a take down and I'll pull it.
 Reality is it's been abandoned and it still is.  IMHO, this brings it back to life.
