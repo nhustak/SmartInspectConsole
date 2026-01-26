@@ -1,16 +1,19 @@
 using System.Collections.Concurrent;
 using System.Net.WebSockets;
 using System.Text;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
+using SmartInspect.Relay.AspNetCore.Configuration;
 
-namespace SmartInspectConsole.Relay.Services;
+namespace SmartInspect.Relay.AspNetCore.Services;
 
 /// <summary>
 /// Forwards log messages to SmartInspect Console via WebSocket.
 /// </summary>
-public class ConsoleForwarder : IDisposable
+public class WebSocketForwarder : ILogForwarder
 {
-    private readonly ILogger<ConsoleForwarder> _logger;
-    private readonly RelayOptions _options;
+    private readonly ILogger<WebSocketForwarder> _logger;
+    private readonly SmartInspectRelayOptions _options;
     private readonly ConcurrentQueue<string> _buffer = new();
     private readonly SemaphoreSlim _sendLock = new(1, 1);
 
@@ -25,15 +28,14 @@ public class ConsoleForwarder : IDisposable
     public int MessagesBuffered => _buffer.Count;
     public DateTime? LastForwardedAt => _lastForwardedAt;
 
-    public ConsoleForwarder(ILogger<ConsoleForwarder> logger, RelayOptions options)
+    public WebSocketForwarder(
+        ILogger<WebSocketForwarder> logger,
+        IOptions<SmartInspectRelayOptions> options)
     {
         _logger = logger;
-        _options = options;
+        _options = options.Value;
     }
 
-    /// <summary>
-    /// Start connecting to the console.
-    /// </summary>
     public async Task StartAsync(CancellationToken cancellationToken = default)
     {
         _reconnectCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
@@ -41,9 +43,6 @@ public class ConsoleForwarder : IDisposable
         _reconnectTask = MonitorConnectionAsync(_reconnectCts.Token);
     }
 
-    /// <summary>
-    /// Stop the connection.
-    /// </summary>
     public async Task StopAsync()
     {
         _reconnectCts?.Cancel();
@@ -63,9 +62,6 @@ public class ConsoleForwarder : IDisposable
         await DisconnectAsync();
     }
 
-    /// <summary>
-    /// Forward a JSON message to the console.
-    /// </summary>
     public async Task<bool> ForwardAsync(string json, CancellationToken cancellationToken = default)
     {
         if (!IsConnected)
@@ -106,9 +102,6 @@ public class ConsoleForwarder : IDisposable
         }
     }
 
-    /// <summary>
-    /// Forward multiple JSON messages to the console.
-    /// </summary>
     public async Task<int> ForwardBatchAsync(IEnumerable<string> messages, CancellationToken cancellationToken = default)
     {
         var forwarded = 0;
@@ -246,30 +239,4 @@ public class ConsoleForwarder : IDisposable
         _webSocket?.Dispose();
         _sendLock.Dispose();
     }
-}
-
-/// <summary>
-/// Configuration options for the relay.
-/// </summary>
-public class RelayOptions
-{
-    public string ConsoleHost { get; set; } = "localhost";
-    public int ConsolePort { get; set; } = 4229;
-    public int BufferSize { get; set; } = 10000;
-    public int ReconnectDelayMs { get; set; } = 5000;
-    public int MaxReconnectAttempts { get; set; } = 0; // 0 = unlimited
-    public RateLimitOptions RateLimit { get; set; } = new();
-    public ApiKeyOptions ApiKeys { get; set; } = new();
-}
-
-public class RateLimitOptions
-{
-    public int RequestsPerMinute { get; set; } = 1000;
-    public int BurstSize { get; set; } = 100;
-}
-
-public class ApiKeyOptions
-{
-    public bool Enabled { get; set; } = false;
-    public List<string> Keys { get; set; } = new();
 }

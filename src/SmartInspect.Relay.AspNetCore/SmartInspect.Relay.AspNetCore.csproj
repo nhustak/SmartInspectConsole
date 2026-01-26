@@ -1,0 +1,32 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFrameworks>net8.0;net9.0;net10.0</TargetFrameworks>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+
+    <!-- NuGet Package Info -->
+    <PackageId>SmartInspect.Relay.AspNetCore</PackageId>
+    <Version>1.0.0</Version>
+    <Authors>Nick Hustak</Authors>
+    <Company>Nick Hustak</Company>
+    <Product>SmartInspect Relay Library</Product>
+    <Description>ASP.NET Core library for embedding SmartInspect relay endpoints in your website. Forward browser logs to SmartInspect Console via WebSocket or through your existing SmartInspect instance.</Description>
+    <Copyright>Copyright (c) 2026 Nick Hustak</Copyright>
+    <PackageTags>smartinspect;logging;relay;aspnetcore;browser</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <RepositoryUrl>https://github.com/yourusername/SmartInspectConsole</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="" Condition="Exists('README.md')" />
+  </ItemGroup>
+
+</Project>

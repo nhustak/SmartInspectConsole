@@ -1,6 +1,8 @@
 # SmartInspect JS
 
-Browser-based logging client for SmartInspect Console via WebSocket.
+Browser-based logging client for SmartInspect Console via WebSocket or HTTP.
+
+**Version 1.1.0**
 
 ## Quick Start
 
@@ -144,6 +146,35 @@ si.events = {
   onStateChange: (state) => console.log('State:', state)
 };
 ```
+
+### HTTP Connection (Production)
+
+For production environments where WebSockets may be blocked by firewalls or proxies, use HTTP mode with the SmartInspect Relay:
+
+```typescript
+const si = new SmartInspect('MyApp', {
+  connectionType: 'http',
+  httpOptions: {
+    endpoint: 'https://yoursite.com/api/v1/logs',
+    apiKey: 'optional-api-key',         // Optional authentication
+    flushInterval: 2000,                // Batch flush interval (ms)
+    maxBatchSize: 100,                  // Max messages per batch
+    compression: true                   // Gzip compress large batches
+  }
+});
+
+await si.connect();
+si.mainSession.logMessage('Hello from production!');
+```
+
+**HTTP Mode Features:**
+- Message batching with configurable interval and batch size
+- Priority flush for error/fatal messages (sent immediately)
+- Automatic page unload handling via `navigator.sendBeacon()`
+- Exponential backoff retry on failures
+- Optional gzip compression for large payloads
+
+See the main SmartInspect Console README for relay setup instructions.
 
 ## SmartInspect Console Setup
 

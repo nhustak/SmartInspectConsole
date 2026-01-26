@@ -71,7 +71,7 @@ SmartInspect Console is a replacement for the original Gurock SmartInspect Conso
 ```
 SmartInspectConsole/
 ├── SmartInspectConsole.sln
-├── smartinspect-js/                      # Browser logging library
+├── smartinspect-js/                      # Browser logging library (TypeScript)
 │   ├── src/
 │   │   ├── connections/                  # Connection transports
 │   │   │   ├── IConnection.ts           # Connection interface
@@ -98,10 +98,15 @@ SmartInspectConsole/
     │   ├── Packets/                      # Packet data classes
     │   └── Parsing/                      # Binary packet parser
     │
-    └── SmartInspectConsole.Relay/        # HTTP Relay Service
-        ├── Program.cs                    # Minimal API endpoints
-        ├── Services/
-        │   └── ConsoleForwarder.cs       # WebSocket client to console
+    ├── SmartInspect.Relay.AspNetCore/    # Embeddable Relay Library (NuGet)
+    │   ├── Configuration/                # SmartInspectRelayOptions
+    │   ├── Extensions/                   # AddSmartInspectRelay()
+    │   ├── Routing/                      # MapSmartInspectRelay()
+    │   ├── Services/                     # ILogForwarder implementations
+    │   └── Internal/                     # Endpoint handlers
+    │
+    └── SmartInspectConsole.Relay/        # Standalone HTTP Relay Service
+        ├── Program.cs                    # Uses SmartInspect.Relay.AspNetCore
         └── appsettings.json              # Configuration
 ```
 
@@ -242,7 +247,7 @@ The console listens on WebSocket port 4229 by default. This can be changed in Se
 
 ## SmartInspect Relay (HTTP Gateway)
 
-The SmartInspect Relay is an ASP.NET Core service that accepts HTTP POST requests from browsers and forwards them to the SmartInspect Console via WebSocket. Use this for production environments where:
+The SmartInspect Relay accepts HTTP POST requests from browsers and forwards them to the SmartInspect Console via WebSocket. Use this for production environments where:
 
 - WebSockets may be blocked by corporate firewalls or proxies
 - The console is on a different network than the browser
@@ -263,7 +268,48 @@ The SmartInspect Relay is an ASP.NET Core service that accepts HTTP POST request
                                             └─────────────────────┘
 ```
 
-### Running the Relay
+### Option 1: Embed in Your Website (Recommended)
+
+Use the `SmartInspect.Relay.AspNetCore` library to add relay endpoints directly to your existing ASP.NET Core website:
+
+```csharp
+// Program.cs - Add to your existing website
+builder.Services.AddSmartInspectRelay(options =>
+{
+    options.ConsoleHost = "localhost";
+    options.ConsolePort = 4229;
+});
+
+app.MapSmartInspectRelay("/api/v1");
+```
+
+**Callback Mode** - If your website already uses SmartInspect for server-side logging:
+
+```csharp
+// Forward browser logs through your existing SmartInspect session
+var browserSession = SiAuto.Si.AddSession("Browser");
+
+builder.Services.AddSmartInspectRelay(
+    onLogEntry: (level, title, data, viewer) =>
+    {
+        switch (level)
+        {
+            case "error": browserSession.LogError(title); break;
+            case "warning": browserSession.LogWarning(title); break;
+            default: browserSession.LogMessage(title); break;
+        }
+    },
+    onWatch: (name, value, type) => browserSession.WatchString(name, value)
+);
+
+app.MapSmartInspectRelay("/api/v1");
+```
+
+The library targets `net8.0`, `net9.0`, and `net10.0`.
+
+### Option 2: Standalone Relay Service
+
+Run the relay as a separate service:
 
 ```bash
 cd src/SmartInspectConsole.Relay
@@ -289,15 +335,7 @@ The relay starts on `http://localhost:5000` by default.
     "ConsolePort": 4229,
     "BufferSize": 10000,
     "ReconnectDelayMs": 5000,
-    "MaxReconnectAttempts": 0,
-    "RateLimit": {
-      "RequestsPerMinute": 1000,
-      "BurstSize": 100
-    },
-    "ApiKeys": {
-      "Enabled": false,
-      "Keys": []
-    }
+    "MaxReconnectAttempts": 0
   }
 }
 ```
@@ -308,6 +346,7 @@ The relay starts on `http://localhost:5000` by default.
 - **Auto-Reconnect**: Automatically reconnects to console with exponential backoff
 - **Request Decompression**: Accepts gzipped request bodies
 - **CORS Support**: Configured for cross-origin requests
+- **Two Modes**: WebSocket (forward to console) or Callback (integrate with existing logging)
 
 ## Protocol Compatibility
 

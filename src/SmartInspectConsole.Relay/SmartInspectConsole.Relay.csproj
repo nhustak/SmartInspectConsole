@@ -10,7 +10,11 @@
     <Product>SmartInspect Console Relay</Product>
     <Company>Nick Hustak</Company>
     <Copyright>Copyright (c) 2026 Nick Hustak</Copyright>
-    <Description>HTTP relay for SmartInspect JS logging</Description>
+    <Description>HTTP relay for SmartInspect JS logging - standalone deployment</Description>
   </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\SmartInspect.Relay.AspNetCore\SmartInspect.Relay.AspNetCore.csproj" />
+  </ItemGroup>
 
 </Project>
