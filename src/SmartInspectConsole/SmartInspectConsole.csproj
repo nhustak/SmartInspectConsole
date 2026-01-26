@@ -17,6 +17,7 @@
     <Company>Nick Hustak</Company>
     <Copyright>Copyright (c) 2026 Nick Hustak</Copyright>
     <Description>WPF replacement console for SmartInspect real-time logging</Description>
+    <ApplicationIcon>Resources\smartinspectconsole.ico</ApplicationIcon>
   </PropertyGroup>
 
 </Project>

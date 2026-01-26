@@ -64,10 +64,10 @@ public class MainViewModel : ViewModelBase, IDisposable
         // Initialize commands
         StartCommand = new AsyncRelayCommand(StartAsync, () => !IsListening);
         StopCommand = new AsyncRelayCommand(StopAsync, () => IsListening);
-        ClearAllCommand = new RelayCommand(ClearAll);
-        ClearLogCommand = new RelayCommand(ClearLog);
-        ClearWatchesCommand = new RelayCommand(ClearWatches);
-        ClearProcessFlowCommand = new RelayCommand(ClearProcessFlow);
+        ClearAllCommand = new RelayCommand(ClearAllWithConfirmation);
+        ClearLogCommand = new RelayCommand(ClearLogWithConfirmation);
+        ClearWatchesCommand = new RelayCommand(ClearWatchesWithConfirmation);
+        ClearProcessFlowCommand = new RelayCommand(ClearProcessFlowWithConfirmation);
 
         // Tab management commands
         AddViewCommand = new RelayCommand(AddView);
@@ -458,6 +458,17 @@ public class MainViewModel : ViewModelBase, IDisposable
     {
         if (view == null) return;
 
+        var count = view.FilteredCount;
+        if (count == 0) return;
+
+        var result = MessageBox.Show(
+            $"Clear {count:N0} log entries from view \"{view.Name}\"?",
+            "Clear View",
+            MessageBoxButton.YesNo,
+            MessageBoxImage.Question);
+
+        if (result != MessageBoxResult.Yes) return;
+
         view.ClearFilteredEntries();
 
         // Update all views since we modified the shared collection
@@ -712,6 +723,67 @@ public class MainViewModel : ViewModelBase, IDisposable
             };
             HandleLogEntry(errorEntry);
         });
+    }
+
+    private void ClearAllWithConfirmation()
+    {
+        var totalItems = LogEntries.Count + Watches.Count + ProcessFlows.Count;
+        if (totalItems == 0) return;
+
+        var result = MessageBox.Show(
+            $"Clear all data?\n\n• {LogEntries.Count:N0} log entries\n• {Watches.Count:N0} watches\n• {ProcessFlows.Count:N0} process flow entries",
+            "Clear All",
+            MessageBoxButton.YesNo,
+            MessageBoxImage.Question);
+
+        if (result != MessageBoxResult.Yes) return;
+
+        ClearAll();
+    }
+
+    private void ClearLogWithConfirmation()
+    {
+        if (LogEntries.Count == 0) return;
+
+        var result = MessageBox.Show(
+            $"Clear {LogEntries.Count:N0} log entries?",
+            "Clear Log",
+            MessageBoxButton.YesNo,
+            MessageBoxImage.Question);
+
+        if (result != MessageBoxResult.Yes) return;
+
+        ClearLog();
+    }
+
+    private void ClearWatchesWithConfirmation()
+    {
+        if (Watches.Count == 0) return;
+
+        var result = MessageBox.Show(
+            $"Clear {Watches.Count:N0} watches?",
+            "Clear Watches",
+            MessageBoxButton.YesNo,
+            MessageBoxImage.Question);
+
+        if (result != MessageBoxResult.Yes) return;
+
+        ClearWatches();
+    }
+
+    private void ClearProcessFlowWithConfirmation()
+    {
+        if (ProcessFlows.Count == 0) return;
+
+        var result = MessageBox.Show(
+            $"Clear {ProcessFlows.Count:N0} process flow entries?",
+            "Clear Process Flow",
+            MessageBoxButton.YesNo,
+            MessageBoxImage.Question);
+
+        if (result != MessageBoxResult.Yes) return;
+
+        ClearProcessFlow();
     }
 
     private void ClearAll()

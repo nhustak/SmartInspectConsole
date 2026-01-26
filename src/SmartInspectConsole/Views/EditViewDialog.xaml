@@ -6,6 +6,7 @@
         xmlns:local="clr-namespace:SmartInspectConsole.Views"
         mc:Ignorable="d"
         Title="Edit View"
+        Icon="/Resources/smartinspectconsole.ico"
         Height="680" Width="520"
         MinHeight="500" MinWidth="400"
         WindowStartupLocation="CenterOwner"

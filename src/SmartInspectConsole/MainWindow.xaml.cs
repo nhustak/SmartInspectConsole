@@ -1,4 +1,3 @@
-using System.Reflection;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -62,16 +61,8 @@ public partial class MainWindow : Window
 
     private void About_Click(object sender, RoutedEventArgs e)
     {
-        var assembly = Assembly.GetExecutingAssembly();
-        var version = assembly.GetName().Version?.ToString() ?? "Unknown";
-        var informationalVersion = assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion;
-        var displayVersion = informationalVersion ?? version;
-
-        MessageBox.Show(
-            $"SmartInspect Console\n\nA replacement console for SmartInspectCore logging.\n\nVersion {displayVersion}",
-            "About",
-            MessageBoxButton.OK,
-            MessageBoxImage.Information);
+        var dialog = new AboutDialog { Owner = this };
+        dialog.ShowDialog();
     }
 
     private void IconLegend_Click(object sender, RoutedEventArgs e)
