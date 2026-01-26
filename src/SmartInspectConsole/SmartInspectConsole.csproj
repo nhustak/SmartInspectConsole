@@ -4,6 +4,11 @@
     <ProjectReference Include="..\SmartInspectConsole.Core\SmartInspectConsole.Core.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Resource Include="Resources\smartinspectconsole.ico" />
+    <Resource Include="Resources\smartinspectconsole.png" />
+  </ItemGroup>
+
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
     <TargetFramework>net10.0-windows</TargetFramework>

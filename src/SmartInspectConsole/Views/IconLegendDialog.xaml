@@ -5,7 +5,7 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         mc:Ignorable="d"
         Title="Icon Legend"
-        Icon="/Resources/smartinspectconsole.ico"
+        Icon="/Resources/smartinspectconsole.png"
         Height="480" Width="400"
         WindowStartupLocation="CenterOwner"
         ResizeMode="NoResize"
