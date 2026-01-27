@@ -63,6 +63,9 @@ public class LogViewViewModel : ViewModelBase
     // Auto-scroll flag
     private bool _autoScroll = true;
 
+    // Cached filtered count to avoid re-enumeration
+    private int _filteredCount;
+
     public LogViewViewModel(ObservableCollection<LogEntry> allLogEntries, object lockObject, string name = "View", bool isPrimaryView = false)
     {
         _allLogEntries = allLogEntries;
@@ -458,7 +461,7 @@ public class LogViewViewModel : ViewModelBase
         set => SetProperty(ref _isSelected, value);
     }
 
-    public int FilteredCount => FilteredLogEntries.Cast<object>().Count();
+    public int FilteredCount => _filteredCount;
 
     #region Copy Commands
 
@@ -466,7 +469,7 @@ public class LogViewViewModel : ViewModelBase
     public ICommand CopySelectedCommand => _copySelectedCommand ??= new RelayCommand(CopySelectedToClipboard, () => SelectedLogEntries?.Count > 0);
 
     private ICommand? _copyAllCommand;
-    public ICommand CopyAllCommand => _copyAllCommand ??= new RelayCommand(CopyAllToClipboard, () => FilteredLogEntries.Cast<object>().Any());
+    public ICommand CopyAllCommand => _copyAllCommand ??= new RelayCommand(CopyAllToClipboard, () => _filteredCount > 0);
 
     #endregion
 
@@ -477,6 +480,7 @@ public class LogViewViewModel : ViewModelBase
     public void RefreshFilter()
     {
         FilteredLogEntries.Refresh();
+        _filteredCount = FilteredLogEntries.Cast<object>().Count();
         OnPropertyChanged(nameof(FilteredCount));
     }
 

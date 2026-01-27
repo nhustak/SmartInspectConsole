@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git add:*)",
+      "Bash(git commit -m \"$\\(cat <<''EOF''\nAdd copy functionality, fix WebSocket shutdown, improve dialogs\n\nSmartInspect Console:\n- Add copy selected/all log entries to clipboard \\(Ctrl+C, Ctrl+Shift+C\\)\n- Add custom MessageDialog that centers over app window on ultrawide screens\n- Add version display in status bar\n- Fix app freeze on close by adding 2-second timeout to WebSocket close\n- Restore full context menu on log entry ListView\n\nsmartinspect-js \\(v1.2.0\\):\n- Add tryConnect\\(\\) for silent/optional connection when Console unavailable\n- Drop messages immediately if connect\\(\\) was never called \\(no buffering\\)\n\nCo-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>\nEOF\n\\)\")"
+    ]
+  }
+}

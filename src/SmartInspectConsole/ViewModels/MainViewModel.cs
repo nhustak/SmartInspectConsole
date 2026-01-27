@@ -1,9 +1,11 @@
+using System.Collections.Concurrent;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Reflection;
 using System.Windows;
 using System.Windows.Data;
 using System.Windows.Input;
+using System.Windows.Threading;
 using SmartInspectConsole.Core.Enums;
 using SmartInspectConsole.Core.Events;
 using SmartInspectConsole.Core.Listeners;
@@ -23,6 +25,14 @@ public class MainViewModel : ViewModelBase, IDisposable
     private SmartInspectPipeListener? _pipeListener;
     private SmartInspectWebSocketListener? _webSocketListener;
     private readonly object _logEntriesLock = new();
+
+    // Batching for high-throughput scenarios
+    private readonly ConcurrentQueue<LogEntry> _pendingLogEntries = new();
+    private readonly ConcurrentQueue<Watch> _pendingWatches = new();
+    private readonly ConcurrentQueue<ProcessFlow> _pendingProcessFlows = new();
+    private readonly DispatcherTimer _batchTimer;
+    private const int BatchIntervalMs = 50; // Process batches every 50ms
+    private const int MaxBatchSize = 500;   // Max items per batch
 
     private DateTime? _lastLogEntryTimestamp;
     private string _statusText = "Ready";
@@ -89,6 +99,14 @@ public class MainViewModel : ViewModelBase, IDisposable
 
         // View-specific commands
         ClearViewLogCommand = new RelayCommand<LogViewViewModel>(ClearViewLog);
+
+        // Initialize batch processing timer
+        _batchTimer = new DispatcherTimer(DispatcherPriority.Background)
+        {
+            Interval = TimeSpan.FromMilliseconds(BatchIntervalMs)
+        };
+        _batchTimer.Tick += ProcessPendingItems;
+        _batchTimer.Start();
     }
 
     #region Properties
@@ -541,75 +559,83 @@ public class MainViewModel : ViewModelBase, IDisposable
 
     private void OnPacketReceived(object? sender, PacketReceivedEventArgs e)
     {
-        Application.Current.Dispatcher.BeginInvoke(() =>
+        // Queue items for batch processing instead of processing immediately
+        switch (e.Packet)
         {
-            switch (e.Packet)
-            {
-                case LogEntry logEntry:
-                    HandleLogEntry(logEntry);
-                    break;
+            case LogEntry logEntry:
+                _pendingLogEntries.Enqueue(logEntry);
+                break;
 
-                case Watch watch:
-                    HandleWatch(watch);
-                    break;
+            case Watch watch:
+                _pendingWatches.Enqueue(watch);
+                break;
 
-                case ProcessFlow processFlow:
-                    HandleProcessFlow(processFlow);
-                    break;
+            case ProcessFlow processFlow:
+                _pendingProcessFlows.Enqueue(processFlow);
+                break;
 
-                case ControlCommand controlCommand:
-                    HandleControlCommand(controlCommand);
-                    break;
+            case ControlCommand controlCommand:
+                // Control commands are processed immediately on UI thread
+                Application.Current.Dispatcher.BeginInvoke(() => HandleControlCommand(controlCommand));
+                break;
 
-                case LogHeader logHeader:
-                    HandleLogHeader(logHeader, e.ClientId);
-                    break;
-            }
-        });
+            case LogHeader logHeader:
+                Application.Current.Dispatcher.BeginInvoke(() => HandleLogHeader(logHeader, e.ClientId));
+                break;
+        }
     }
 
-    private static int _diagCount = 0;
-    private void HandleLogEntry(LogEntry logEntry)
+    private void ProcessPendingItems(object? sender, EventArgs e)
     {
-        // Calculate elapsed time since previous entry
-        if (_lastLogEntryTimestamp.HasValue)
-        {
-            logEntry.ElapsedTime = logEntry.Timestamp - _lastLogEntryTimestamp.Value;
-        }
-        _lastLogEntryTimestamp = logEntry.Timestamp;
+        var logEntriesProcessed = 0;
+        var watchesProcessed = 0;
+        var processFlowsProcessed = 0;
 
-        lock (_logEntriesLock)
+        // Process log entries in batch
+        while (logEntriesProcessed < MaxBatchSize && _pendingLogEntries.TryDequeue(out var logEntry))
         {
-            LogEntries.Add(logEntry);
-        }
-
-        // Track available filter values
-        TrackAvailableFilterValues(logEntry);
-
-        // Notify all views to update their filtered counts
-        foreach (var view in Views)
-        {
-            view.RefreshFilter();
-        }
-
-        // Quick diagnostic - show first entry info
-        if (_diagCount++ == 0 && DebugMode)
-        {
-            var info = $"First entry received!\n\n" +
-                       $"Type: {logEntry.LogEntryType}\n" +
-                       $"Session: {logEntry.SessionName}\n" +
-                       $"App: {logEntry.AppName}\n" +
-                       $"Title: {logEntry.Title}\n\n" +
-                       $"LogEntries.Count: {LogEntries.Count}\n" +
-                       $"Views.Count: {Views.Count}\n\n";
-            foreach (var v in Views)
+            // Calculate elapsed time
+            if (_lastLogEntryTimestamp.HasValue)
             {
-                info += $"View '{v.Name}': FilteredCount={v.FilteredCount}, ShowMessage={v.ShowMessage}, ShowDebug={v.ShowDebug}\n";
+                logEntry.ElapsedTime = logEntry.Timestamp - _lastLogEntryTimestamp.Value;
             }
-            MessageBoxHelper.Show(info, "Debug: First Entry");
+            _lastLogEntryTimestamp = logEntry.Timestamp;
+
+            lock (_logEntriesLock)
+            {
+                LogEntries.Add(logEntry);
+            }
+
+            TrackAvailableFilterValues(logEntry);
+            logEntriesProcessed++;
         }
 
-        OnPropertyChanged(nameof(EntryCount));
+        // Process watches in batch
+        while (watchesProcessed < MaxBatchSize && _pendingWatches.TryDequeue(out var watch))
+        {
+            HandleWatch(watch);
+            watchesProcessed++;
+        }
+
+        // Process process flows in batch
+        while (processFlowsProcessed < MaxBatchSize && _pendingProcessFlows.TryDequeue(out var processFlow))
+        {
+            lock (_logEntriesLock)
+            {
+                ProcessFlows.Add(processFlow);
+            }
+            processFlowsProcessed++;
+        }
+
+        // Only refresh views if we processed something
+        if (logEntriesProcessed > 0)
+        {
+            foreach (var view in Views)
+            {
+                view.RefreshFilter();
+            }
+            OnPropertyChanged(nameof(EntryCount));
+        }
     }
 
     private void TrackAvailableFilterValues(LogEntry logEntry)
@@ -732,7 +758,7 @@ public class MainViewModel : ViewModelBase, IDisposable
                 ViewerId = ViewerId.Data,
                 Color = System.Drawing.Color.FromArgb(255, 200, 80, 80)
             };
-            HandleLogEntry(errorEntry);
+            _pendingLogEntries.Enqueue(errorEntry);
         });
     }
 
@@ -1005,6 +1031,7 @@ public class MainViewModel : ViewModelBase, IDisposable
 
     public void Dispose()
     {
+        _batchTimer.Stop();
         _tcpListener?.Dispose();
         _pipeListener?.Dispose();
         _webSocketListener?.Dispose();
