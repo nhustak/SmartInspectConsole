@@ -1,7 +1,11 @@
+using System.Collections;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
+using System.Text;
 using System.Text.RegularExpressions;
+using System.Windows;
 using System.Windows.Data;
+using System.Windows.Input;
 using SmartInspectConsole.Core.Enums;
 using SmartInspectConsole.Core.Packets;
 
@@ -442,6 +446,12 @@ public class LogViewViewModel : ViewModelBase
         set => SetProperty(ref _selectedLogEntry, value);
     }
 
+    /// <summary>
+    /// Collection of selected log entries for multi-select copy operations.
+    /// This is set from the view via attached behavior.
+    /// </summary>
+    public IList? SelectedLogEntries { get; set; }
+
     public bool IsSelected
     {
         get => _isSelected;
@@ -449,6 +459,16 @@ public class LogViewViewModel : ViewModelBase
     }
 
     public int FilteredCount => FilteredLogEntries.Cast<object>().Count();
+
+    #region Copy Commands
+
+    private ICommand? _copySelectedCommand;
+    public ICommand CopySelectedCommand => _copySelectedCommand ??= new RelayCommand(CopySelectedToClipboard, () => SelectedLogEntries?.Count > 0);
+
+    private ICommand? _copyAllCommand;
+    public ICommand CopyAllCommand => _copyAllCommand ??= new RelayCommand(CopyAllToClipboard, () => FilteredLogEntries.Cast<object>().Any());
+
+    #endregion
 
     #endregion
 
@@ -622,6 +642,65 @@ public class LogViewViewModel : ViewModelBase
         }
 
         OnPropertyChanged(nameof(FilteredCount));
+    }
+
+    /// <summary>
+    /// Copies selected log entries to clipboard.
+    /// </summary>
+    private void CopySelectedToClipboard()
+    {
+        if (SelectedLogEntries == null || SelectedLogEntries.Count == 0)
+            return;
+
+        var entries = SelectedLogEntries.Cast<LogEntry>().OrderBy(e => e.Timestamp);
+        CopyEntriesToClipboard(entries);
+    }
+
+    /// <summary>
+    /// Copies all filtered log entries to clipboard.
+    /// </summary>
+    private void CopyAllToClipboard()
+    {
+        var entries = FilteredLogEntries.Cast<LogEntry>();
+        CopyEntriesToClipboard(entries);
+    }
+
+    /// <summary>
+    /// Formats and copies log entries to clipboard as tab-separated values.
+    /// </summary>
+    private static void CopyEntriesToClipboard(IEnumerable<LogEntry> entries)
+    {
+        var sb = new StringBuilder();
+
+        // Header row
+        sb.AppendLine("Time\tElapsed\tType\tApp\tSession\tTitle\tThread");
+
+        foreach (var entry in entries)
+        {
+            sb.Append(entry.Timestamp.ToString("HH:mm:ss.fff"));
+            sb.Append('\t');
+            sb.Append(entry.ElapsedTimeFormatted);
+            sb.Append('\t');
+            sb.Append(entry.LogEntryType);
+            sb.Append('\t');
+            sb.Append(entry.AppName);
+            sb.Append('\t');
+            sb.Append(entry.SessionName);
+            sb.Append('\t');
+            sb.Append(entry.Title);
+            sb.Append('\t');
+            sb.Append(entry.ThreadId);
+            sb.AppendLine();
+        }
+
+        try
+        {
+            Clipboard.SetText(sb.ToString());
+        }
+        catch
+        {
+            // Clipboard operation failed - ignore
+        }
     }
 
     #endregion

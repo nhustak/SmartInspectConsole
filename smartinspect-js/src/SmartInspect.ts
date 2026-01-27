@@ -124,6 +124,23 @@ export class SmartInspect {
   }
 
   /**
+   * Try to connect to SmartInspect Console without throwing on failure.
+   * Useful when logging is optional (e.g., client machines without Console).
+   * Messages will be buffered and sent if/when connection succeeds.
+   *
+   * @param url Connection URL (optional, uses default if not provided)
+   * @returns true if connected, false if connection failed
+   */
+  async tryConnect(url?: string): Promise<boolean> {
+    try {
+      await this.connect(url);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  /**
    * Disconnect from SmartInspect Console or Relay
    */
   disconnect(): void {

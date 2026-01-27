@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using System.ComponentModel;
+using System.Reflection;
 using System.Windows;
 using System.Windows.Data;
 using System.Windows.Input;
@@ -7,6 +8,7 @@ using SmartInspectConsole.Core.Enums;
 using SmartInspectConsole.Core.Events;
 using SmartInspectConsole.Core.Listeners;
 using SmartInspectConsole.Core.Packets;
+using SmartInspectConsole.Helpers;
 using SmartInspectConsole.Services;
 using SmartInspectConsole.Views;
 
@@ -163,6 +165,15 @@ public class MainViewModel : ViewModelBase, IDisposable
         : $"WebSocket: {_webSocketPort} (Stopped)";
 
     public int EntryCount => LogEntries.Count;
+
+    public string Version { get; } = GetVersion();
+
+    private static string GetVersion()
+    {
+        var assembly = Assembly.GetExecutingAssembly();
+        var version = assembly.GetName().Version;
+        return version != null ? $"v{version.Major}.{version.Minor}.{version.Build}.{version.Revision}" : "v?";
+    }
 
     // Panel visibility
     public bool ShowWatchesPanel
@@ -338,7 +349,7 @@ public class MainViewModel : ViewModelBase, IDisposable
         catch (Exception ex)
         {
             StatusText = $"Error: {ex.Message}";
-            MessageBox.Show($"Failed to start listeners:\n\n{ex.Message}", "Error",
+            MessageBoxHelper.Show($"Failed to start listeners:\n\n{ex.Message}", "Error",
                 MessageBoxButton.OK, MessageBoxImage.Error);
         }
     }
@@ -393,7 +404,7 @@ public class MainViewModel : ViewModelBase, IDisposable
         if (view == null || view.IsPrimaryView || Views.Count <= 1) return;
 
         // Show confirmation dialog
-        var result = MessageBox.Show(
+        var result = MessageBoxHelper.Show(
             $"Are you sure you want to close the view \"{view.Name}\"?",
             "Close View",
             MessageBoxButton.YesNo,
@@ -461,7 +472,7 @@ public class MainViewModel : ViewModelBase, IDisposable
         var count = view.FilteredCount;
         if (count == 0) return;
 
-        var result = MessageBox.Show(
+        var result = MessageBoxHelper.Show(
             $"Clear {count:N0} log entries from view \"{view.Name}\"?",
             "Clear View",
             MessageBoxButton.YesNo,
@@ -595,7 +606,7 @@ public class MainViewModel : ViewModelBase, IDisposable
             {
                 info += $"View '{v.Name}': FilteredCount={v.FilteredCount}, ShowMessage={v.ShowMessage}, ShowDebug={v.ShowDebug}\n";
             }
-            MessageBox.Show(info, "Debug: First Entry");
+            MessageBoxHelper.Show(info, "Debug: First Entry");
         }
 
         OnPropertyChanged(nameof(EntryCount));
@@ -730,7 +741,7 @@ public class MainViewModel : ViewModelBase, IDisposable
         var totalItems = LogEntries.Count + Watches.Count + ProcessFlows.Count;
         if (totalItems == 0) return;
 
-        var result = MessageBox.Show(
+        var result = MessageBoxHelper.Show(
             $"Clear all data?\n\n• {LogEntries.Count:N0} log entries\n• {Watches.Count:N0} watches\n• {ProcessFlows.Count:N0} process flow entries",
             "Clear All",
             MessageBoxButton.YesNo,
@@ -745,7 +756,7 @@ public class MainViewModel : ViewModelBase, IDisposable
     {
         if (LogEntries.Count == 0) return;
 
-        var result = MessageBox.Show(
+        var result = MessageBoxHelper.Show(
             $"Clear {LogEntries.Count:N0} log entries?",
             "Clear Log",
             MessageBoxButton.YesNo,
@@ -760,7 +771,7 @@ public class MainViewModel : ViewModelBase, IDisposable
     {
         if (Watches.Count == 0) return;
 
-        var result = MessageBox.Show(
+        var result = MessageBoxHelper.Show(
             $"Clear {Watches.Count:N0} watches?",
             "Clear Watches",
             MessageBoxButton.YesNo,
@@ -775,7 +786,7 @@ public class MainViewModel : ViewModelBase, IDisposable
     {
         if (ProcessFlows.Count == 0) return;
 
-        var result = MessageBox.Show(
+        var result = MessageBoxHelper.Show(
             $"Clear {ProcessFlows.Count:N0} process flow entries?",
             "Clear Process Flow",
             MessageBoxButton.YesNo,

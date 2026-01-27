@@ -80,21 +80,23 @@ public class SmartInspectWebSocketListener : IPacketListener
         IsListening = false;
         _cts?.Cancel();
 
-        // Close all WebSocket connections
-        foreach (var kvp in _clients)
-        {
-            try
+        // Close all WebSocket connections in parallel with timeout
+        var closeTasks = _clients.Values
+            .Where(ws => ws.State == WebSocketState.Open)
+            .Select(async ws =>
             {
-                if (kvp.Value.State == WebSocketState.Open)
+                try
                 {
-                    await kvp.Value.CloseAsync(
+                    using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(2));
+                    await ws.CloseAsync(
                         WebSocketCloseStatus.NormalClosure,
                         "Server shutting down",
-                        CancellationToken.None);
+                        cts.Token);
                 }
-            }
-            catch { }
-        }
+                catch { }
+            });
+
+        await Task.WhenAll(closeTasks);
         _clients.Clear();
 
         try

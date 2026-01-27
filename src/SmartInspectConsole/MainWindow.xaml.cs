@@ -3,6 +3,7 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using Microsoft.Win32;
 using SmartInspectConsole.Core.Packets;
+using SmartInspectConsole.Helpers;
 using SmartInspectConsole.Services;
 using SmartInspectConsole.ViewModels;
 using SmartInspectConsole.Views;
@@ -141,11 +142,11 @@ public partial class MainWindow : Window
                 state.IsDarkTheme = App.IsDarkTheme;
                 _viewModel.SaveStateTo(state);
                 state.SaveTo(dialog.FileName);
-                MessageBox.Show("Layout exported successfully.", "Export", MessageBoxButton.OK, MessageBoxImage.Information);
+                MessageBoxHelper.Show("Layout exported successfully.", "Export", MessageBoxButton.OK, MessageBoxImage.Information);
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"Failed to export layout:\n\n{ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                MessageBoxHelper.Show($"Failed to export layout:\n\n{ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
     }
@@ -169,11 +170,11 @@ public partial class MainWindow : Window
                 App.IsDarkTheme = state.IsDarkTheme;
                 DarkThemeMenuItem.IsChecked = App.IsDarkTheme;
                 LightThemeMenuItem.IsChecked = !App.IsDarkTheme;
-                MessageBox.Show("Layout imported successfully.", "Import", MessageBoxButton.OK, MessageBoxImage.Information);
+                MessageBoxHelper.Show("Layout imported successfully.", "Import", MessageBoxButton.OK, MessageBoxImage.Information);
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"Failed to import layout:\n\n{ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                MessageBoxHelper.Show($"Failed to import layout:\n\n{ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
     }
@@ -183,6 +184,14 @@ public partial class MainWindow : Window
         if (sender is ListView listView && listView.SelectedItem is LogEntry logEntry)
         {
             _viewModel.OpenLogEntryDetailCommand.Execute(logEntry);
+        }
+    }
+
+    private void LogEntryList_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (sender is ListView listView && listView.DataContext is LogViewViewModel viewModel)
+        {
+            viewModel.SelectedLogEntries = listView.SelectedItems;
         }
     }
 }

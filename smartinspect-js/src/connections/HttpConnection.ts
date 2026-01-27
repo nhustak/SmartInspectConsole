@@ -61,6 +61,7 @@ export class HttpConnection implements IConnection {
   private endpoint: string = '';
   private unloadHandler: (() => void) | null = null;
   private visibilityHandler: (() => void) | null = null;
+  private connectionAttempted: boolean = false;
 
   // Configuration with defaults
   public apiKey?: string;
@@ -104,6 +105,7 @@ export class HttpConnection implements IConnection {
    */
   async connect(url: string): Promise<void> {
     this.endpoint = url.endsWith('/') ? url.slice(0, -1) : url;
+    this.connectionAttempted = true;
     this.setState('connecting');
 
     try {
@@ -143,6 +145,11 @@ export class HttpConnection implements IConnection {
    * Send a message to the relay
    */
   send(message: Message): void {
+    // Drop messages silently if connect() was never called
+    if (!this.connectionAttempted) {
+      return;
+    }
+
     this.buffer.push(message);
 
     // Immediate flush for critical messages

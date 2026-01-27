@@ -1,5 +1,6 @@
 using System.Windows;
 using SmartInspectConsole.Core.Listeners;
+using SmartInspectConsole.Helpers;
 
 namespace SmartInspectConsole.Views;
 
@@ -31,7 +32,7 @@ public partial class SettingsDialog : Window
         // Validate TCP port
         if (!int.TryParse(TcpPortTextBox.Text, out var port) || port <= 0 || port > 65535)
         {
-            MessageBox.Show("Please enter a valid port number (1-65535).", "Invalid Port",
+            MessageBoxHelper.Show("Please enter a valid port number (1-65535).", "Invalid Port",
                 MessageBoxButton.OK, MessageBoxImage.Warning);
             TcpPortTextBox.Focus();
             return;
@@ -41,7 +42,7 @@ public partial class SettingsDialog : Window
         var pipeName = PipeNameTextBox.Text?.Trim();
         if (string.IsNullOrWhiteSpace(pipeName))
         {
-            MessageBox.Show("Please enter a valid pipe name.", "Invalid Pipe Name",
+            MessageBoxHelper.Show("Please enter a valid pipe name.", "Invalid Pipe Name",
                 MessageBoxButton.OK, MessageBoxImage.Warning);
             PipeNameTextBox.Focus();
             return;
@@ -50,7 +51,7 @@ public partial class SettingsDialog : Window
         // Validate WebSocket port
         if (!int.TryParse(WebSocketPortTextBox.Text, out var wsPort) || wsPort <= 0 || wsPort > 65535)
         {
-            MessageBox.Show("Please enter a valid WebSocket port number (1-65535).", "Invalid Port",
+            MessageBoxHelper.Show("Please enter a valid WebSocket port number (1-65535).", "Invalid Port",
                 MessageBoxButton.OK, MessageBoxImage.Warning);
             WebSocketPortTextBox.Focus();
             return;
@@ -59,7 +60,7 @@ public partial class SettingsDialog : Window
         // Check for port conflicts
         if (port == wsPort)
         {
-            MessageBox.Show("TCP and WebSocket ports must be different.", "Port Conflict",
+            MessageBoxHelper.Show("TCP and WebSocket ports must be different.", "Port Conflict",
                 MessageBoxButton.OK, MessageBoxImage.Warning);
             WebSocketPortTextBox.Focus();
             return;

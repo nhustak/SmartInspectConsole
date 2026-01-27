@@ -383,13 +383,42 @@
 
                                 <!-- Log Entries List -->
                                 <ListView Grid.Row="1"
+                                          x:Name="LogEntryListView"
                                           ItemsSource="{Binding FilteredLogEntries}"
                                           SelectedItem="{Binding SelectedLogEntry}"
+                                          SelectionMode="Extended"
                                           VirtualizingPanel.IsVirtualizing="True"
                                           VirtualizingPanel.VirtualizationMode="Recycling"
                                           ScrollViewer.CanContentScroll="True"
                                           MouseDoubleClick="LogEntryList_MouseDoubleClick"
+                                          SelectionChanged="LogEntryList_SelectionChanged"
                                           behaviors:AutoScrollBehavior.AutoScroll="{Binding AutoScroll}">
+                                    <ListView.ContextMenu>
+                                        <ContextMenu>
+                                            <MenuItem Header="Copy Selected" Command="{Binding CopySelectedCommand}" InputGestureText="Ctrl+C"/>
+                                            <MenuItem Header="Copy All (Filtered)" Command="{Binding CopyAllCommand}" InputGestureText="Ctrl+Shift+C"/>
+                                            <Separator/>
+                                            <MenuItem Header="Add View" Command="{Binding DataContext.AddViewCommand, RelativeSource={RelativeSource AncestorType=TabControl}}"/>
+                                            <MenuItem Header="Edit View..." Command="{Binding DataContext.EditViewCommand, RelativeSource={RelativeSource AncestorType=TabControl}}" CommandParameter="{Binding}"/>
+                                            <MenuItem Header="Duplicate View" Command="{Binding DataContext.DuplicateViewCommand, RelativeSource={RelativeSource AncestorType=TabControl}}" CommandParameter="{Binding}"/>
+                                            <MenuItem Header="Remove View" Command="{Binding DataContext.RemoveViewCommand, RelativeSource={RelativeSource AncestorType=TabControl}}" CommandParameter="{Binding}"/>
+                                            <Separator/>
+                                            <MenuItem Header="Clear View Log" Command="{Binding DataContext.ClearViewLogCommand, RelativeSource={RelativeSource AncestorType=TabControl}}" CommandParameter="{Binding}"
+                                                      ToolTip="Clear only the log entries visible in this view"/>
+                                            <MenuItem Header="Clear All Logs" Command="{Binding DataContext.ClearLogCommand, RelativeSource={RelativeSource AncestorType=TabControl}}"
+                                                      ToolTip="Clear all log entries from all views"/>
+                                            <Separator/>
+                                            <MenuItem Header="Show Panels">
+                                                <MenuItem Header="Watches" IsCheckable="True" IsChecked="{Binding DataContext.ShowWatchesPanel, RelativeSource={RelativeSource AncestorType=TabControl}}"/>
+                                                <MenuItem Header="Process Flow" IsCheckable="True" IsChecked="{Binding DataContext.ShowProcessFlowPanel, RelativeSource={RelativeSource AncestorType=TabControl}}"/>
+                                                <MenuItem Header="Details" IsCheckable="True" IsChecked="{Binding DataContext.ShowDetailsPanel, RelativeSource={RelativeSource AncestorType=TabControl}}"/>
+                                            </MenuItem>
+                                        </ContextMenu>
+                                    </ListView.ContextMenu>
+                                    <ListView.InputBindings>
+                                        <KeyBinding Key="C" Modifiers="Ctrl" Command="{Binding CopySelectedCommand}"/>
+                                        <KeyBinding Key="C" Modifiers="Ctrl+Shift" Command="{Binding CopyAllCommand}"/>
+                                    </ListView.InputBindings>
                                     <ListView.View>
                                         <GridView>
                                             <GridViewColumn Header="" Width="30">
@@ -645,6 +674,10 @@
             <Separator Background="{DynamicResource BorderBrush}"/>
             <StatusBarItem>
                 <TextBlock Text="{Binding EntryCount, StringFormat=Total: {0}}"/>
+            </StatusBarItem>
+            <Separator Background="{DynamicResource BorderBrush}"/>
+            <StatusBarItem HorizontalAlignment="Right">
+                <TextBlock Text="{Binding Version}" Foreground="{DynamicResource ForegroundSecondaryBrush}"/>
             </StatusBarItem>
         </StatusBar>
     </Grid>

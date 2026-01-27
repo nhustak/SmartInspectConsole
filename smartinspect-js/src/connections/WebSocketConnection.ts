@@ -11,6 +11,7 @@ export class WebSocketConnection implements IConnection {
   private reconnectAttempts: number = 0;
   private reconnectTimer: number | null = null;
   private buffer: Message[] = [];
+  private connectionAttempted: boolean = false;
 
   // Configuration
   public autoReconnect: boolean = true;
@@ -46,6 +47,7 @@ export class WebSocketConnection implements IConnection {
     }
 
     this.url = url;
+    this.connectionAttempted = true;
     this.setState('connecting');
 
     return new Promise((resolve, reject) => {
@@ -103,7 +105,8 @@ export class WebSocketConnection implements IConnection {
   send(message: Message): void {
     if (this.ws && this.ws.readyState === WebSocket.OPEN) {
       this.ws.send(JSON.stringify(message));
-    } else if (this.bufferWhenDisconnected) {
+    } else if (this.connectionAttempted && this.bufferWhenDisconnected) {
+      // Only buffer if connect() was called - otherwise drop silently
       this.addToBuffer(message);
     }
   }

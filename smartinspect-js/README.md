@@ -2,7 +2,7 @@
 
 Browser-based logging client for SmartInspect Console via WebSocket or HTTP.
 
-**Version 1.1.0**
+**Version 1.2.0**
 
 ## Quick Start
 
@@ -146,6 +146,27 @@ si.events = {
   onStateChange: (state) => console.log('State:', state)
 };
 ```
+
+### Optional Connection (Silent Mode)
+
+For client machines where SmartInspect Console may not be running, use `tryConnect()` to avoid errors:
+
+```typescript
+import { SiAuto } from 'smartinspect-js';
+
+// Silent connection - won't throw if Console unavailable
+SiAuto.si.appName = 'My App';
+await SiAuto.si.tryConnect('ws://localhost:4229');
+
+// Log messages - works regardless of connection state
+// Messages are buffered and sent when/if Console becomes available
+SiAuto.main.logMessage('This works even if Console is not running');
+```
+
+This is useful for:
+- Client-side applications where logging is optional
+- Development environments where Console may not always be running
+- Graceful degradation when logging infrastructure is unavailable
 
 ### HTTP Connection (Production)
 
