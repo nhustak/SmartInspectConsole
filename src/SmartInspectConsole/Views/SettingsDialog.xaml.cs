@@ -13,18 +13,21 @@ public partial class SettingsDialog : Window
     public string PipeName { get; private set; }
     public int WebSocketPort { get; private set; }
     public bool DebugMode { get; private set; }
+    public int MaxLogEntries { get; private set; }
 
-    public SettingsDialog(int currentPort, string currentPipeName, int currentWebSocketPort, bool debugMode)
+    public SettingsDialog(int currentPort, string currentPipeName, int currentWebSocketPort, bool debugMode, int maxLogEntries)
     {
         InitializeComponent();
         TcpPort = currentPort;
         PipeName = currentPipeName;
         WebSocketPort = currentWebSocketPort;
         DebugMode = debugMode;
+        MaxLogEntries = maxLogEntries;
         TcpPortTextBox.Text = currentPort.ToString();
         PipeNameTextBox.Text = currentPipeName;
         WebSocketPortTextBox.Text = currentWebSocketPort.ToString();
         DebugModeCheckBox.IsChecked = debugMode;
+        MaxLogEntriesTextBox.Text = maxLogEntries.ToString("N0");
     }
 
     private void OK_Click(object sender, RoutedEventArgs e)
@@ -66,10 +69,21 @@ public partial class SettingsDialog : Window
             return;
         }
 
+        // Validate max log entries
+        var maxLogText = MaxLogEntriesTextBox.Text.Replace(",", "").Replace(" ", "");
+        if (!int.TryParse(maxLogText, out var maxLog) || maxLog < 1000)
+        {
+            MessageBoxHelper.Show("Max log entries must be at least 1,000.", "Invalid Value",
+                MessageBoxButton.OK, MessageBoxImage.Warning);
+            MaxLogEntriesTextBox.Focus();
+            return;
+        }
+
         TcpPort = port;
         PipeName = pipeName;
         WebSocketPort = wsPort;
         DebugMode = DebugModeCheckBox.IsChecked == true;
+        MaxLogEntries = maxLog;
         DialogResult = true;
         Close();
     }
@@ -93,5 +107,10 @@ public partial class SettingsDialog : Window
     private void DefaultWebSocket_Click(object sender, RoutedEventArgs e)
     {
         WebSocketPortTextBox.Text = SmartInspectWebSocketListener.DefaultPort.ToString();
+    }
+
+    private void DefaultMaxLogEntries_Click(object sender, RoutedEventArgs e)
+    {
+        MaxLogEntriesTextBox.Text = "100,000";
     }
 }

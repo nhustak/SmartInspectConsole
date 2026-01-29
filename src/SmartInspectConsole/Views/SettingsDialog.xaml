@@ -93,6 +93,22 @@
                 </Grid>
             </GroupBox>
 
+            <!-- Performance Settings -->
+            <GroupBox Header="Performance">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <Label Grid.Column="0" Content="Max Log Entries:" VerticalAlignment="Center"/>
+                    <TextBox Grid.Column="1" x:Name="MaxLogEntriesTextBox"
+                             Width="120" HorizontalAlignment="Left"
+                             ToolTip="Maximum log entries to keep in memory (oldest are trimmed). Min: 1,000"/>
+                    <Button Grid.Column="2" Content="Default" Click="DefaultMaxLogEntries_Click" Padding="8,4"/>
+                </Grid>
+            </GroupBox>
+
             <!-- Developer Settings -->
             <GroupBox Header="Developer">
                 <CheckBox x:Name="DebugModeCheckBox" Content="Enable debug logging (logs internal console messages)"

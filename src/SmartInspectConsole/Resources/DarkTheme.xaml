@@ -27,17 +27,7 @@
         <Setter Property="Foreground" Value="{StaticResource ForegroundBrush}"/>
     </Style>
 
-    <!-- Menu -->
-    <Style TargetType="Menu">
-        <Setter Property="Background" Value="{StaticResource SurfaceBrush}"/>
-        <Setter Property="Foreground" Value="{StaticResource ForegroundBrush}"/>
-    </Style>
-
-    <Style TargetType="MenuItem">
-        <Setter Property="Background" Value="{StaticResource SurfaceBrush}"/>
-        <Setter Property="Foreground" Value="{StaticResource ForegroundBrush}"/>
-        <Setter Property="BorderBrush" Value="{StaticResource BorderBrush}"/>
-    </Style>
+    <!-- Menu styles removed - WPF UI handles menu theming including icon foreground -->
 
     <!-- ToolBar -->
     <Style TargetType="ToolBar">

@@ -88,7 +88,7 @@ public partial class MainWindow : Window
 
     private async void Settings_Click(object sender, RoutedEventArgs e)
     {
-        var dialog = new SettingsDialog(_viewModel.TcpPort, _viewModel.PipeName, _viewModel.WebSocketPort, _viewModel.DebugMode)
+        var dialog = new SettingsDialog(_viewModel.TcpPort, _viewModel.PipeName, _viewModel.WebSocketPort, _viewModel.DebugMode, _viewModel.MaxLogEntries)
         {
             Owner = this
         };
@@ -99,8 +99,9 @@ public partial class MainWindow : Window
             var pipeChanged = dialog.PipeName != _viewModel.PipeName;
             var wsPortChanged = dialog.WebSocketPort != _viewModel.WebSocketPort;
 
-            // Apply debug mode immediately (no restart needed)
+            // Apply settings that don't require restart
             _viewModel.DebugMode = dialog.DebugMode;
+            _viewModel.MaxLogEntries = dialog.MaxLogEntries;
 
             if (portChanged || pipeChanged || wsPortChanged)
             {

@@ -1,4 +1,5 @@
 using System.Windows;
+using Wpf.Ui.Appearance;
 
 namespace SmartInspectConsole;
 
@@ -35,8 +36,23 @@ public partial class App : Application
 
         var newTheme = new ResourceDictionary { Source = themeUri };
 
-        // Replace the theme dictionary
-        Current.Resources.MergedDictionaries.Clear();
-        Current.Resources.MergedDictionaries.Add(newTheme);
+        // Replace theme dictionaries - keep WPF UI dictionaries, replace our custom one
+        var merged = Current.Resources.MergedDictionaries;
+
+        // Remove existing custom theme (last dictionary)
+        for (int i = merged.Count - 1; i >= 0; i--)
+        {
+            var dict = merged[i];
+            if (dict.Source != null && (dict.Source.OriginalString.Contains("DarkTheme") || dict.Source.OriginalString.Contains("LightTheme")))
+            {
+                merged.RemoveAt(i);
+            }
+        }
+
+        // Add new custom theme
+        merged.Add(newTheme);
+
+        // Switch WPF UI theme
+        ApplicationThemeManager.Apply(_isDarkTheme ? ApplicationTheme.Dark : ApplicationTheme.Light);
     }
 }

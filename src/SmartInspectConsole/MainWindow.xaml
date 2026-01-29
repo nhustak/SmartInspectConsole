@@ -156,6 +156,7 @@
                 </Setter.Value>
             </Setter>
         </Style>
+        <!-- Menu styles removed - WPF UI handles menu theming including icon foreground -->
     </Window.Resources>
 
     <Grid>
@@ -169,39 +170,66 @@
         <!-- Menu -->
         <Menu Grid.Row="0" Background="{DynamicResource SurfaceBrush}" Foreground="{DynamicResource ForegroundBrush}">
             <MenuItem Header="_File">
-                <MenuItem Header="_Export Layout..." Click="ExportLayout_Click"/>
-                <MenuItem Header="_Import Layout..." Click="ImportLayout_Click"/>
+                <MenuItem Header="_Export Layout..." Click="ExportLayout_Click">
+                    <MenuItem.Icon><TextBlock Text="&#xE78C;" FontFamily="Segoe Fluent Icons" FontSize="14"/></MenuItem.Icon>
+                </MenuItem>
+                <MenuItem Header="_Import Layout..." Click="ImportLayout_Click">
+                    <MenuItem.Icon><TextBlock Text="&#xE8B5;" FontFamily="Segoe Fluent Icons" FontSize="14"/></MenuItem.Icon>
+                </MenuItem>
                 <Separator/>
-                <MenuItem Header="E_xit" Click="Exit_Click"/>
+                <MenuItem Header="E_xit" Click="Exit_Click">
+                    <MenuItem.Icon><TextBlock Text="&#xE7E8;" FontFamily="Segoe Fluent Icons" FontSize="14"/></MenuItem.Icon>
+                </MenuItem>
             </MenuItem>
             <MenuItem Header="_View">
-                <MenuItem Header="_Add View" Command="{Binding AddViewCommand}"/>
-                <MenuItem Header="_Edit View..." Command="{Binding EditViewCommand}" CommandParameter="{Binding SelectedView}"/>
-                <MenuItem Header="_Remove View" Command="{Binding RemoveViewCommand}" CommandParameter="{Binding SelectedView}"/>
-                <MenuItem Header="_Duplicate View" Command="{Binding DuplicateViewCommand}" CommandParameter="{Binding SelectedView}"/>
+                <MenuItem Header="_Add View" Command="{Binding AddViewCommand}">
+                    <MenuItem.Icon><TextBlock Text="&#xE710;" FontFamily="Segoe Fluent Icons" FontSize="14"/></MenuItem.Icon>
+                </MenuItem>
+                <MenuItem Header="_Edit View..." Command="{Binding EditViewCommand}" CommandParameter="{Binding SelectedView}">
+                    <MenuItem.Icon><TextBlock Text="&#xE70F;" FontFamily="Segoe Fluent Icons" FontSize="14"/></MenuItem.Icon>
+                </MenuItem>
+                <MenuItem Header="_Remove View" Command="{Binding RemoveViewCommand}" CommandParameter="{Binding SelectedView}">
+                    <MenuItem.Icon><TextBlock Text="&#xE74D;" FontFamily="Segoe Fluent Icons" FontSize="14"/></MenuItem.Icon>
+                </MenuItem>
+                <MenuItem Header="_Duplicate View" Command="{Binding DuplicateViewCommand}" CommandParameter="{Binding SelectedView}">
+                    <MenuItem.Icon><TextBlock Text="&#xE8C8;" FontFamily="Segoe Fluent Icons" FontSize="14"/></MenuItem.Icon>
+                </MenuItem>
                 <Separator/>
-                <MenuItem Header="_Clear All" Command="{Binding ClearAllCommand}"/>
-                <MenuItem Header="Clear _Log" Command="{Binding ClearLogCommand}"/>
+                <MenuItem Header="_Clear All" Command="{Binding ClearAllCommand}">
+                    <MenuItem.Icon><TextBlock Text="&#xE894;" FontFamily="Segoe Fluent Icons" FontSize="14"/></MenuItem.Icon>
+                </MenuItem>
+                <MenuItem Header="Clear _Log" Command="{Binding ClearLogCommand}">
+                    <MenuItem.Icon><TextBlock Text="&#xE74D;" FontFamily="Segoe Fluent Icons" FontSize="14"/></MenuItem.Icon>
+                </MenuItem>
                 <MenuItem Header="Clear _Watches" Command="{Binding ClearWatchesCommand}"/>
                 <MenuItem Header="Clear _Process Flow" Command="{Binding ClearProcessFlowCommand}"/>
                 <Separator/>
                 <MenuItem Header="_Panels">
+                    <MenuItem.Icon><TextBlock Text="&#xE8A0;" FontFamily="Segoe Fluent Icons" FontSize="14"/></MenuItem.Icon>
+                    <MenuItem Header="_Connections" IsCheckable="True" IsChecked="{Binding ShowConnectionsPanel}"/>
                     <MenuItem Header="_Watches" IsCheckable="True" IsChecked="{Binding ShowWatchesPanel}"/>
                     <MenuItem Header="_Process Flow" IsCheckable="True" IsChecked="{Binding ShowProcessFlowPanel}"/>
                     <MenuItem Header="_Details" IsCheckable="True" IsChecked="{Binding ShowDetailsPanel}"/>
                 </MenuItem>
                 <MenuItem Header="_Theme">
+                    <MenuItem.Icon><TextBlock Text="&#xE771;" FontFamily="Segoe Fluent Icons" FontSize="14"/></MenuItem.Icon>
                     <MenuItem Header="_Dark Theme" Click="DarkTheme_Click" IsCheckable="True" x:Name="DarkThemeMenuItem" IsChecked="True"/>
                     <MenuItem Header="_Light Theme" Click="LightTheme_Click" IsCheckable="True" x:Name="LightThemeMenuItem"/>
                 </MenuItem>
             </MenuItem>
             <MenuItem Header="_Tools">
-                <MenuItem Header="_Settings..." Click="Settings_Click"/>
+                <MenuItem Header="_Settings..." Click="Settings_Click">
+                    <MenuItem.Icon><TextBlock Text="&#xE713;" FontFamily="Segoe Fluent Icons" FontSize="14"/></MenuItem.Icon>
+                </MenuItem>
             </MenuItem>
             <MenuItem Header="_Help">
-                <MenuItem Header="_Icon Legend..." Click="IconLegend_Click"/>
+                <MenuItem Header="_Icon Legend..." Click="IconLegend_Click">
+                    <MenuItem.Icon><TextBlock Text="&#xE946;" FontFamily="Segoe Fluent Icons" FontSize="14"/></MenuItem.Icon>
+                </MenuItem>
                 <Separator/>
-                <MenuItem Header="_About" Click="About_Click"/>
+                <MenuItem Header="_About" Click="About_Click">
+                    <MenuItem.Icon><TextBlock Text="&#xE897;" FontFamily="Segoe Fluent Icons" FontSize="14"/></MenuItem.Icon>
+                </MenuItem>
             </MenuItem>
         </Menu>
 
@@ -258,6 +286,8 @@
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="{Binding HasDetailTabs, Converter={StaticResource BoolToGridLengthConverter}, ConverterParameter=1.5}"/>
                     <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="{Binding ShowConnectionsPanel, Converter={StaticResource BoolToGridLengthConverter}, ConverterParameter=0.6}"/>
+                    <RowDefinition Height="Auto"/>
                     <RowDefinition Height="{Binding ShowWatchesPanel, Converter={StaticResource BoolToGridLengthConverter}}"/>
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="{Binding ShowProcessFlowPanel, Converter={StaticResource BoolToGridLengthConverter}}"/>
@@ -271,17 +301,31 @@
                             behaviors:TabReorderBehavior.EnableReorder="True">
                     <TabControl.ContextMenu>
                         <ContextMenu>
-                            <MenuItem Header="Add View" Command="{Binding AddViewCommand}"/>
-                            <MenuItem Header="Edit View..." Command="{Binding EditViewCommand}" CommandParameter="{Binding SelectedView}"/>
-                            <MenuItem Header="Duplicate View" Command="{Binding DuplicateViewCommand}" CommandParameter="{Binding SelectedView}"/>
-                            <MenuItem Header="Remove View" Command="{Binding RemoveViewCommand}" CommandParameter="{Binding SelectedView}"/>
+                            <MenuItem Header="Add View" Command="{Binding AddViewCommand}">
+                                <MenuItem.Icon><TextBlock Text="&#xE710;" FontFamily="Segoe Fluent Icons" FontSize="14"/></MenuItem.Icon>
+                            </MenuItem>
+                            <MenuItem Header="Edit View..." Command="{Binding EditViewCommand}" CommandParameter="{Binding SelectedView}">
+                                <MenuItem.Icon><TextBlock Text="&#xE70F;" FontFamily="Segoe Fluent Icons" FontSize="14"/></MenuItem.Icon>
+                            </MenuItem>
+                            <MenuItem Header="Duplicate View" Command="{Binding DuplicateViewCommand}" CommandParameter="{Binding SelectedView}">
+                                <MenuItem.Icon><TextBlock Text="&#xE8C8;" FontFamily="Segoe Fluent Icons" FontSize="14"/></MenuItem.Icon>
+                            </MenuItem>
+                            <MenuItem Header="Remove View" Command="{Binding RemoveViewCommand}" CommandParameter="{Binding SelectedView}">
+                                <MenuItem.Icon><TextBlock Text="&#xE74D;" FontFamily="Segoe Fluent Icons" FontSize="14"/></MenuItem.Icon>
+                            </MenuItem>
                             <Separator/>
                             <MenuItem Header="Clear View Log" Command="{Binding ClearViewLogCommand}" CommandParameter="{Binding SelectedView}"
-                                      ToolTip="Clear only the log entries visible in this view"/>
+                                      ToolTip="Clear only the log entries visible in this view">
+                                <MenuItem.Icon><TextBlock Text="&#xE894;" FontFamily="Segoe Fluent Icons" FontSize="14"/></MenuItem.Icon>
+                            </MenuItem>
                             <MenuItem Header="Clear All Logs" Command="{Binding ClearLogCommand}"
-                                      ToolTip="Clear all log entries from all views"/>
+                                      ToolTip="Clear all log entries from all views">
+                                <MenuItem.Icon><TextBlock Text="&#xE74D;" FontFamily="Segoe Fluent Icons" FontSize="14"/></MenuItem.Icon>
+                            </MenuItem>
                             <Separator/>
                             <MenuItem Header="Show Panels">
+                                <MenuItem.Icon><TextBlock Text="&#xE8A0;" FontFamily="Segoe Fluent Icons" FontSize="14"/></MenuItem.Icon>
+                                <MenuItem Header="Connections" IsCheckable="True" IsChecked="{Binding ShowConnectionsPanel}"/>
                                 <MenuItem Header="Watches" IsCheckable="True" IsChecked="{Binding ShowWatchesPanel}"/>
                                 <MenuItem Header="Process Flow" IsCheckable="True" IsChecked="{Binding ShowProcessFlowPanel}"/>
                                 <MenuItem Header="Details" IsCheckable="True" IsChecked="{Binding ShowDetailsPanel}"/>
@@ -395,20 +439,44 @@
                                           behaviors:AutoScrollBehavior.AutoScroll="{Binding AutoScroll}">
                                     <ListView.ContextMenu>
                                         <ContextMenu>
-                                            <MenuItem Header="Copy Selected" Command="{Binding CopySelectedCommand}" InputGestureText="Ctrl+C"/>
-                                            <MenuItem Header="Copy All (Filtered)" Command="{Binding CopyAllCommand}" InputGestureText="Ctrl+Shift+C"/>
+                                            <MenuItem Header="Copy Selected" Command="{Binding CopySelectedCommand}" InputGestureText="Ctrl+C">
+                                                <MenuItem.Icon><TextBlock Text="&#xE8C8;" FontFamily="Segoe Fluent Icons" FontSize="14"/></MenuItem.Icon>
+                                            </MenuItem>
+                                            <MenuItem Header="Copy All (Filtered)" Command="{Binding CopyAllCommand}" InputGestureText="Ctrl+Shift+C">
+                                                <MenuItem.Icon><TextBlock Text="&#xE7B8;" FontFamily="Segoe Fluent Icons" FontSize="14"/></MenuItem.Icon>
+                                            </MenuItem>
                                             <Separator/>
-                                            <MenuItem Header="Add View" Command="{Binding DataContext.AddViewCommand, RelativeSource={RelativeSource AncestorType=TabControl}}"/>
-                                            <MenuItem Header="Edit View..." Command="{Binding DataContext.EditViewCommand, RelativeSource={RelativeSource AncestorType=TabControl}}" CommandParameter="{Binding}"/>
-                                            <MenuItem Header="Duplicate View" Command="{Binding DataContext.DuplicateViewCommand, RelativeSource={RelativeSource AncestorType=TabControl}}" CommandParameter="{Binding}"/>
-                                            <MenuItem Header="Remove View" Command="{Binding DataContext.RemoveViewCommand, RelativeSource={RelativeSource AncestorType=TabControl}}" CommandParameter="{Binding}"/>
+                                            <MenuItem Header="Mute App"
+                                                      Command="{Binding DataContext.MuteAppCommand, RelativeSource={RelativeSource AncestorType=TabControl}}"
+                                                      CommandParameter="{Binding SelectedLogEntry}">
+                                                <MenuItem.Icon><TextBlock Text="&#xE74F;" FontFamily="Segoe Fluent Icons" FontSize="14"/></MenuItem.Icon>
+                                            </MenuItem>
+                                            <Separator/>
+                                            <MenuItem Header="Add View" Command="{Binding DataContext.AddViewCommand, RelativeSource={RelativeSource AncestorType=TabControl}}">
+                                                <MenuItem.Icon><TextBlock Text="&#xE710;" FontFamily="Segoe Fluent Icons" FontSize="14"/></MenuItem.Icon>
+                                            </MenuItem>
+                                            <MenuItem Header="Edit View..." Command="{Binding DataContext.EditViewCommand, RelativeSource={RelativeSource AncestorType=TabControl}}" CommandParameter="{Binding}">
+                                                <MenuItem.Icon><TextBlock Text="&#xE70F;" FontFamily="Segoe Fluent Icons" FontSize="14"/></MenuItem.Icon>
+                                            </MenuItem>
+                                            <MenuItem Header="Duplicate View" Command="{Binding DataContext.DuplicateViewCommand, RelativeSource={RelativeSource AncestorType=TabControl}}" CommandParameter="{Binding}">
+                                                <MenuItem.Icon><TextBlock Text="&#xE8C8;" FontFamily="Segoe Fluent Icons" FontSize="14"/></MenuItem.Icon>
+                                            </MenuItem>
+                                            <MenuItem Header="Remove View" Command="{Binding DataContext.RemoveViewCommand, RelativeSource={RelativeSource AncestorType=TabControl}}" CommandParameter="{Binding}">
+                                                <MenuItem.Icon><TextBlock Text="&#xE74D;" FontFamily="Segoe Fluent Icons" FontSize="14"/></MenuItem.Icon>
+                                            </MenuItem>
                                             <Separator/>
                                             <MenuItem Header="Clear View Log" Command="{Binding DataContext.ClearViewLogCommand, RelativeSource={RelativeSource AncestorType=TabControl}}" CommandParameter="{Binding}"
-                                                      ToolTip="Clear only the log entries visible in this view"/>
+                                                      ToolTip="Clear only the log entries visible in this view">
+                                                <MenuItem.Icon><TextBlock Text="&#xE894;" FontFamily="Segoe Fluent Icons" FontSize="14"/></MenuItem.Icon>
+                                            </MenuItem>
                                             <MenuItem Header="Clear All Logs" Command="{Binding DataContext.ClearLogCommand, RelativeSource={RelativeSource AncestorType=TabControl}}"
-                                                      ToolTip="Clear all log entries from all views"/>
+                                                      ToolTip="Clear all log entries from all views">
+                                                <MenuItem.Icon><TextBlock Text="&#xE74D;" FontFamily="Segoe Fluent Icons" FontSize="14"/></MenuItem.Icon>
+                                            </MenuItem>
                                             <Separator/>
                                             <MenuItem Header="Show Panels">
+                                                <MenuItem.Icon><TextBlock Text="&#xE8A0;" FontFamily="Segoe Fluent Icons" FontSize="14"/></MenuItem.Icon>
+                                                <MenuItem Header="Connections" IsCheckable="True" IsChecked="{Binding DataContext.ShowConnectionsPanel, RelativeSource={RelativeSource AncestorType=TabControl}}"/>
                                                 <MenuItem Header="Watches" IsCheckable="True" IsChecked="{Binding DataContext.ShowWatchesPanel, RelativeSource={RelativeSource AncestorType=TabControl}}"/>
                                                 <MenuItem Header="Process Flow" IsCheckable="True" IsChecked="{Binding DataContext.ShowProcessFlowPanel, RelativeSource={RelativeSource AncestorType=TabControl}}"/>
                                                 <MenuItem Header="Details" IsCheckable="True" IsChecked="{Binding DataContext.ShowDetailsPanel, RelativeSource={RelativeSource AncestorType=TabControl}}"/>
@@ -513,16 +581,105 @@
 
                 <GridSplitter Grid.Row="3" Height="5" HorizontalAlignment="Stretch"
                               Background="{DynamicResource BorderBrush}" ResizeDirection="Rows"
+                              Visibility="{Binding ShowConnectionsPanel, Converter={StaticResource BoolToVisibilityConverter}}"/>
+
+                <!-- Connections Panel -->
+                <GroupBox Grid.Row="4" Header="Connections" Margin="4"
+                          Visibility="{Binding ShowConnectionsPanel, Converter={StaticResource BoolToVisibilityConverter}}">
+                    <GroupBox.ContextMenu>
+                        <ContextMenu>
+                            <MenuItem Header="Mute All" Command="{Binding MuteAllCommand}">
+                                <MenuItem.Icon><TextBlock Text="&#xE74F;" FontFamily="Segoe Fluent Icons" FontSize="14"/></MenuItem.Icon>
+                            </MenuItem>
+                            <MenuItem Header="Unmute All" Command="{Binding UnmuteAllCommand}">
+                                <MenuItem.Icon><TextBlock Text="&#xE767;" FontFamily="Segoe Fluent Icons" FontSize="14"/></MenuItem.Icon>
+                            </MenuItem>
+                            <Separator/>
+                            <MenuItem Header="Hide Panel" Command="{Binding HideConnectionsPanelCommand}">
+                                <MenuItem.Icon><TextBlock Text="&#xED1A;" FontFamily="Segoe Fluent Icons" FontSize="14"/></MenuItem.Icon>
+                            </MenuItem>
+                        </ContextMenu>
+                    </GroupBox.ContextMenu>
+                    <ListView ItemsSource="{Binding ConnectedApplications}"
+                              VirtualizingPanel.IsVirtualizing="True"
+                              x:Name="ConnectionsListView">
+                        <ListView.ItemContainerStyle>
+                            <Style TargetType="ListViewItem" BasedOn="{StaticResource {x:Type ListViewItem}}">
+                                <Setter Property="Tag" Value="{Binding DataContext, ElementName=ConnectionsListView}"/>
+                                <Setter Property="ContextMenu">
+                                    <Setter.Value>
+                                        <ContextMenu>
+                                            <MenuItem Header="Toggle Mute"
+                                                      Command="{Binding PlacementTarget.Tag.ToggleMuteCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                                      CommandParameter="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource AncestorType=ContextMenu}}">
+                                                <MenuItem.Icon><TextBlock Text="&#xE74F;" FontFamily="Segoe Fluent Icons" FontSize="14"/></MenuItem.Icon>
+                                            </MenuItem>
+                                            <Separator/>
+                                            <MenuItem Header="Mute All"
+                                                      Command="{Binding PlacementTarget.Tag.MuteAllCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}">
+                                                <MenuItem.Icon><TextBlock Text="&#xE74F;" FontFamily="Segoe Fluent Icons" FontSize="14"/></MenuItem.Icon>
+                                            </MenuItem>
+                                            <MenuItem Header="Unmute All"
+                                                      Command="{Binding PlacementTarget.Tag.UnmuteAllCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}">
+                                                <MenuItem.Icon><TextBlock Text="&#xE767;" FontFamily="Segoe Fluent Icons" FontSize="14"/></MenuItem.Icon>
+                                            </MenuItem>
+                                        </ContextMenu>
+                                    </Setter.Value>
+                                </Setter>
+                            </Style>
+                        </ListView.ItemContainerStyle>
+                        <ListView.View>
+                            <GridView>
+                                <GridViewColumn Header="" Width="28">
+                                    <GridViewColumn.CellTemplate>
+                                        <DataTemplate>
+                                            <Ellipse Width="10" Height="10">
+                                                <Ellipse.Style>
+                                                    <Style TargetType="Ellipse">
+                                                        <Setter Property="Fill" Value="Gray"/>
+                                                        <Style.Triggers>
+                                                            <DataTrigger Binding="{Binding IsConnected}" Value="True">
+                                                                <Setter Property="Fill" Value="LimeGreen"/>
+                                                            </DataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </Ellipse.Style>
+                                            </Ellipse>
+                                        </DataTemplate>
+                                    </GridViewColumn.CellTemplate>
+                                </GridViewColumn>
+                                <GridViewColumn Header="Application" Width="140" DisplayMemberBinding="{Binding AppName}"/>
+                                <GridViewColumn Header="Host" Width="110" DisplayMemberBinding="{Binding HostName}"/>
+                                <GridViewColumn Header="Messages" Width="80" DisplayMemberBinding="{Binding MessageCount, StringFormat=N0}"/>
+                                <GridViewColumn Header="Muted" Width="50">
+                                    <GridViewColumn.CellTemplate>
+                                        <DataTemplate>
+                                            <CheckBox IsChecked="{Binding IsMuted}"
+                                                      ToolTip="Mute/unmute - muted apps have messages discarded"/>
+                                        </DataTemplate>
+                                    </GridViewColumn.CellTemplate>
+                                </GridViewColumn>
+                            </GridView>
+                        </ListView.View>
+                    </ListView>
+                </GroupBox>
+
+                <GridSplitter Grid.Row="5" Height="5" HorizontalAlignment="Stretch"
+                              Background="{DynamicResource BorderBrush}" ResizeDirection="Rows"
                               Visibility="{Binding ShowWatchesPanel, Converter={StaticResource BoolToVisibilityConverter}}"/>
 
                 <!-- Watches -->
-                <GroupBox Grid.Row="4" Header="Watches" Margin="4"
+                <GroupBox Grid.Row="6" Header="Watches" Margin="4"
                           Visibility="{Binding ShowWatchesPanel, Converter={StaticResource BoolToVisibilityConverter}}">
                     <GroupBox.ContextMenu>
                         <ContextMenu>
-                            <MenuItem Header="Clear Watches" Command="{Binding ClearWatchesCommand}"/>
+                            <MenuItem Header="Clear Watches" Command="{Binding ClearWatchesCommand}">
+                                <MenuItem.Icon><TextBlock Text="&#xE894;" FontFamily="Segoe Fluent Icons" FontSize="14"/></MenuItem.Icon>
+                            </MenuItem>
                             <Separator/>
-                            <MenuItem Header="Hide Panel" Command="{Binding HideWatchesPanelCommand}"/>
+                            <MenuItem Header="Hide Panel" Command="{Binding HideWatchesPanelCommand}">
+                                <MenuItem.Icon><TextBlock Text="&#xED1A;" FontFamily="Segoe Fluent Icons" FontSize="14"/></MenuItem.Icon>
+                            </MenuItem>
                         </ContextMenu>
                     </GroupBox.ContextMenu>
                     <ListView ItemsSource="{Binding Watches}"
@@ -538,18 +695,22 @@
                     </ListView>
                 </GroupBox>
 
-                <GridSplitter Grid.Row="5" Height="5" HorizontalAlignment="Stretch"
+                <GridSplitter Grid.Row="7" Height="5" HorizontalAlignment="Stretch"
                               Background="{DynamicResource BorderBrush}" ResizeDirection="Rows"
                               Visibility="{Binding ShowProcessFlowPanel, Converter={StaticResource BoolToVisibilityConverter}}"/>
 
                 <!-- Process Flow -->
-                <GroupBox Grid.Row="6" Header="Process Flow" Margin="4"
+                <GroupBox Grid.Row="8" Header="Process Flow" Margin="4"
                           Visibility="{Binding ShowProcessFlowPanel, Converter={StaticResource BoolToVisibilityConverter}}">
                     <GroupBox.ContextMenu>
                         <ContextMenu>
-                            <MenuItem Header="Clear Process Flow" Command="{Binding ClearProcessFlowCommand}"/>
+                            <MenuItem Header="Clear Process Flow" Command="{Binding ClearProcessFlowCommand}">
+                                <MenuItem.Icon><TextBlock Text="&#xE894;" FontFamily="Segoe Fluent Icons" FontSize="14"/></MenuItem.Icon>
+                            </MenuItem>
                             <Separator/>
-                            <MenuItem Header="Hide Panel" Command="{Binding HideProcessFlowPanelCommand}"/>
+                            <MenuItem Header="Hide Panel" Command="{Binding HideProcessFlowPanelCommand}">
+                                <MenuItem.Icon><TextBlock Text="&#xED1A;" FontFamily="Segoe Fluent Icons" FontSize="14"/></MenuItem.Icon>
+                            </MenuItem>
                         </ContextMenu>
                     </GroupBox.ContextMenu>
                     <ListView ItemsSource="{Binding ProcessFlows}"

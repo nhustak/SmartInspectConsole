@@ -11,6 +11,7 @@ using SmartInspectConsole.Core.Events;
 using SmartInspectConsole.Core.Listeners;
 using SmartInspectConsole.Core.Packets;
 using SmartInspectConsole.Helpers;
+using SmartInspectConsole.Models;
 using SmartInspectConsole.Services;
 using SmartInspectConsole.Views;
 
@@ -45,6 +46,12 @@ public class MainViewModel : ViewModelBase, IDisposable
     private bool _showWatchesPanel = true;
     private bool _showProcessFlowPanel = true;
     private bool _showDetailsPanel = true;
+    private bool _showConnectionsPanel = true;
+
+    // Connection Manager
+    private readonly Dictionary<string, ConnectedApplication> _connectionsByClientId = new();
+    private readonly HashSet<string> _mutedApps = new();
+    private int _maxLogEntries = 100_000;
 
     // Network settings
     private int _tcpPort = SmartInspectTcpListener.DefaultPort;
@@ -61,12 +68,15 @@ public class MainViewModel : ViewModelBase, IDisposable
         Views = new ObservableCollection<LogViewViewModel>();
         DetailTabs = new ObservableCollection<LogEntryDetailViewModel>();
 
+        ConnectedApplications = new ObservableCollection<ConnectedApplication>();
+
         // Enable collection synchronization for cross-thread access
         BindingOperations.EnableCollectionSynchronization(LogEntries, _logEntriesLock);
         BindingOperations.EnableCollectionSynchronization(Watches, _logEntriesLock);
         BindingOperations.EnableCollectionSynchronization(ProcessFlows, _logEntriesLock);
         BindingOperations.EnableCollectionSynchronization(Views, _logEntriesLock);
         BindingOperations.EnableCollectionSynchronization(DetailTabs, _logEntriesLock);
+        BindingOperations.EnableCollectionSynchronization(ConnectedApplications, _logEntriesLock);
 
         // Create default "All" view (primary view that cannot be closed)
         var allView = new LogViewViewModel(LogEntries, _logEntriesLock, "All", isPrimaryView: true);
@@ -92,6 +102,13 @@ public class MainViewModel : ViewModelBase, IDisposable
         HideWatchesPanelCommand = new RelayCommand(() => ShowWatchesPanel = false);
         HideProcessFlowPanelCommand = new RelayCommand(() => ShowProcessFlowPanel = false);
         HideDetailsPanelCommand = new RelayCommand(() => ShowDetailsPanel = false);
+        HideConnectionsPanelCommand = new RelayCommand(() => ShowConnectionsPanel = false);
+
+        // Connection Manager commands
+        ToggleMuteCommand = new RelayCommand<ConnectedApplication>(ToggleMute);
+        MuteAppCommand = new RelayCommand<LogEntry>(MuteApp);
+        MuteAllCommand = new RelayCommand(MuteAll);
+        UnmuteAllCommand = new RelayCommand(UnmuteAll);
 
         // Detail tab commands
         OpenLogEntryDetailCommand = new RelayCommand<LogEntry>(OpenLogEntryDetail);
@@ -116,6 +133,7 @@ public class MainViewModel : ViewModelBase, IDisposable
     public ObservableCollection<ProcessFlow> ProcessFlows { get; }
     public ObservableCollection<LogViewViewModel> Views { get; }
     public ObservableCollection<LogEntryDetailViewModel> DetailTabs { get; }
+    public ObservableCollection<ConnectedApplication> ConnectedApplications { get; }
 
     // Available filter values (populated from received log entries)
     public ObservableCollection<string> AvailableAppNames { get; } = new();
@@ -212,6 +230,18 @@ public class MainViewModel : ViewModelBase, IDisposable
         set => SetProperty(ref _showDetailsPanel, value);
     }
 
+    public bool ShowConnectionsPanel
+    {
+        get => _showConnectionsPanel;
+        set => SetProperty(ref _showConnectionsPanel, value);
+    }
+
+    public int MaxLogEntries
+    {
+        get => _maxLogEntries;
+        set => SetProperty(ref _maxLogEntries, Math.Max(1000, value));
+    }
+
     public int TcpPort
     {
         get => _tcpPort;
@@ -282,6 +312,13 @@ public class MainViewModel : ViewModelBase, IDisposable
     public ICommand HideWatchesPanelCommand { get; }
     public ICommand HideProcessFlowPanelCommand { get; }
     public ICommand HideDetailsPanelCommand { get; }
+    public ICommand HideConnectionsPanelCommand { get; }
+
+    // Connection Manager
+    public ICommand ToggleMuteCommand { get; }
+    public ICommand MuteAppCommand { get; }
+    public ICommand MuteAllCommand { get; }
+    public ICommand UnmuteAllCommand { get; }
 
     // Detail tabs
     public ICommand OpenLogEntryDetailCommand { get; }
@@ -594,6 +631,17 @@ public class MainViewModel : ViewModelBase, IDisposable
         // Process log entries in batch
         while (logEntriesProcessed < MaxBatchSize && _pendingLogEntries.TryDequeue(out var logEntry))
         {
+            // Update connection message count (even for muted apps)
+            IncrementConnectionMessageCount(logEntry.AppName, logEntry.HostName);
+
+            // Skip muted apps - discard before adding to collection
+            var muteKey = $"{logEntry.AppName}@{logEntry.HostName}";
+            if (_mutedApps.Contains(muteKey))
+            {
+                logEntriesProcessed++;
+                continue;
+            }
+
             // Calculate elapsed time
             if (_lastLogEntryTimestamp.HasValue)
             {
@@ -608,6 +656,17 @@ public class MainViewModel : ViewModelBase, IDisposable
 
             TrackAvailableFilterValues(logEntry);
             logEntriesProcessed++;
+        }
+
+        // Trim oldest entries if over the cap
+        if (LogEntries.Count > _maxLogEntries)
+        {
+            lock (_logEntriesLock)
+            {
+                var excess = LogEntries.Count - _maxLogEntries;
+                for (var i = 0; i < excess; i++)
+                    LogEntries.RemoveAt(0);
+            }
         }
 
         // Process watches in batch
@@ -715,13 +774,37 @@ public class MainViewModel : ViewModelBase, IDisposable
     private void HandleLogHeader(LogHeader header, string clientId)
     {
         header.ParseContent();
-        StatusText = $"Client connected: {header.AppName ?? "Unknown"} @ {header.HostName ?? "Unknown"}";
+        var appName = header.AppName ?? "Unknown";
+        var hostName = header.HostName ?? "Unknown";
+
+        // Update connection tracking with app/host info from header
+        if (_connectionsByClientId.TryGetValue(clientId, out var connection))
+        {
+            connection.AppName = appName;
+            connection.HostName = hostName;
+            connection.IsMuted = _mutedApps.Contains(connection.MuteKey);
+        }
+
+        StatusText = $"Client connected: {appName} @ {hostName}";
     }
 
     private void OnClientConnected(object? sender, ClientEventArgs e)
     {
         Application.Current.Dispatcher.BeginInvoke(() =>
         {
+            var connection = new ConnectedApplication
+            {
+                ClientId = e.ClientId,
+                AppName = e.AppName ?? e.ClientId,
+                HostName = e.HostName ?? "",
+                IsConnected = true
+            };
+            connection.IsMuted = _mutedApps.Contains(connection.MuteKey);
+            connection.PropertyChanged += OnConnectionPropertyChanged;
+
+            _connectionsByClientId[e.ClientId] = connection;
+            ConnectedApplications.Add(connection);
+
             StatusText = $"Client connected: {e.ClientId}";
             OnPropertyChanged(nameof(TcpStatus));
             OnPropertyChanged(nameof(PipeStatus));
@@ -733,11 +816,92 @@ public class MainViewModel : ViewModelBase, IDisposable
     {
         Application.Current.Dispatcher.BeginInvoke(() =>
         {
+            if (_connectionsByClientId.TryGetValue(e.ClientId, out var connection))
+            {
+                connection.IsConnected = false;
+                connection.DisconnectedAt = DateTime.Now;
+            }
+
+            // Schedule cleanup of disconnected client after 60 seconds
+            var cleanupTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(60) };
+            var clientId = e.ClientId;
+            cleanupTimer.Tick += (_, _) =>
+            {
+                cleanupTimer.Stop();
+                if (_connectionsByClientId.TryGetValue(clientId, out var conn) && !conn.IsConnected)
+                {
+                    _connectionsByClientId.Remove(clientId);
+                    ConnectedApplications.Remove(conn);
+                }
+            };
+            cleanupTimer.Start();
+
             StatusText = $"Client disconnected: {e.ClientId}";
             OnPropertyChanged(nameof(TcpStatus));
             OnPropertyChanged(nameof(PipeStatus));
             OnPropertyChanged(nameof(WebSocketStatus));
         });
+    }
+
+    private void IncrementConnectionMessageCount(string appName, string hostName)
+    {
+        foreach (var conn in ConnectedApplications)
+        {
+            if (conn.AppName == appName && conn.HostName == hostName)
+            {
+                conn.MessageCount++;
+                return;
+            }
+        }
+    }
+
+    private void OnConnectionPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(ConnectedApplication.IsMuted) && sender is ConnectedApplication app)
+        {
+            if (app.IsMuted)
+                _mutedApps.Add(app.MuteKey);
+            else
+                _mutedApps.Remove(app.MuteKey);
+        }
+    }
+
+    private void ToggleMute(ConnectedApplication? app)
+    {
+        if (app == null) return;
+        app.IsMuted = !app.IsMuted;
+    }
+
+    private void MuteApp(LogEntry? logEntry)
+    {
+        if (logEntry == null) return;
+        var muteKey = $"{logEntry.AppName}@{logEntry.HostName}";
+        _mutedApps.Add(muteKey);
+
+        // Also update the connection if it exists
+        foreach (var conn in ConnectedApplications)
+        {
+            if (conn.MuteKey == muteKey)
+                conn.IsMuted = true;
+        }
+    }
+
+    private void MuteAll()
+    {
+        foreach (var conn in ConnectedApplications)
+        {
+            conn.IsMuted = true;
+            _mutedApps.Add(conn.MuteKey);
+        }
+    }
+
+    private void UnmuteAll()
+    {
+        _mutedApps.Clear();
+        foreach (var conn in ConnectedApplications)
+        {
+            conn.IsMuted = false;
+        }
     }
 
     private void OnError(object? sender, Exception e)
@@ -884,6 +1048,11 @@ public class MainViewModel : ViewModelBase, IDisposable
         state.ShowWatchesPanel = ShowWatchesPanel;
         state.ShowProcessFlowPanel = ShowProcessFlowPanel;
         state.ShowDetailsPanel = ShowDetailsPanel;
+        state.ShowConnectionsPanel = ShowConnectionsPanel;
+
+        // Connection Manager
+        state.MutedApplications = _mutedApps.ToList();
+        state.MaxLogEntries = MaxLogEntries;
 
         // Network settings
         state.TcpPort = TcpPort;
@@ -913,6 +1082,13 @@ public class MainViewModel : ViewModelBase, IDisposable
         ShowWatchesPanel = state.ShowWatchesPanel;
         ShowProcessFlowPanel = state.ShowProcessFlowPanel;
         ShowDetailsPanel = state.ShowDetailsPanel;
+        ShowConnectionsPanel = state.ShowConnectionsPanel;
+
+        // Connection Manager
+        _mutedApps.Clear();
+        foreach (var muted in state.MutedApplications)
+            _mutedApps.Add(muted);
+        MaxLogEntries = state.MaxLogEntries > 0 ? state.MaxLogEntries : 100_000;
 
         // Network settings
         TcpPort = state.TcpPort > 0 ? state.TcpPort : SmartInspectTcpListener.DefaultPort;

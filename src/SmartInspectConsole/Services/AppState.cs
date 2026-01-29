@@ -45,6 +45,11 @@ public class AppState
     // Developer settings
     public bool DebugMode { get; set; } = false;
 
+    // Connection Manager
+    public bool ShowConnectionsPanel { get; set; } = true;
+    public List<string> MutedApplications { get; set; } = new();
+    public int MaxLogEntries { get; set; } = 100_000;
+
     // Views configuration
     public List<ViewState> Views { get; set; } = new();
 
