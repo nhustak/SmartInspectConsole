@@ -6,7 +6,7 @@
         mc:Ignorable="d"
         Title="Settings"
         Icon="/Resources/smartinspectconsole.png"
-        Height="400" Width="420"
+        Height="460" Width="420"
         WindowStartupLocation="CenterOwner"
         ResizeMode="NoResize"
         ShowInTaskbar="False"
@@ -107,6 +107,12 @@
                              ToolTip="Maximum log entries to keep in memory (oldest are trimmed). Min: 1,000"/>
                     <Button Grid.Column="2" Content="Default" Click="DefaultMaxLogEntries_Click" Padding="8,4"/>
                 </Grid>
+            </GroupBox>
+
+            <!-- Behavior -->
+            <GroupBox Header="Behavior">
+                <CheckBox x:Name="ConfirmBeforeClearCheckBox" Content="Confirm before clearing log entries"
+                          Foreground="{DynamicResource ForegroundBrush}"/>
             </GroupBox>
 
             <!-- Developer Settings -->

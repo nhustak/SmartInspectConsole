@@ -1,6 +1,8 @@
+using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using System.Windows.Interop;
 using Microsoft.Win32;
 using SmartInspectConsole.Core.Packets;
 using SmartInspectConsole.Helpers;
@@ -17,6 +19,11 @@ public partial class MainWindow : Window
 {
     private readonly MainViewModel _viewModel;
 
+    [DllImport("dwmapi.dll")]
+    private static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int value, int size);
+
+    private const int DWMWA_USE_IMMERSIVE_DARK_MODE = 20;
+
     public MainWindow()
     {
         InitializeComponent();
@@ -31,6 +38,18 @@ public partial class MainWindow : Window
 
         Loaded += MainWindow_Loaded;
         Closing += MainWindow_Closing;
+
+        // Apply dark title bar via DWM
+        SourceInitialized += (_, _) => ApplyDarkTitleBar(App.IsDarkTheme);
+    }
+
+    private void ApplyDarkTitleBar(bool dark)
+    {
+        if (PresentationSource.FromVisual(this) is HwndSource hwndSource)
+        {
+            int value = dark ? 1 : 0;
+            DwmSetWindowAttribute(hwndSource.Handle, DWMWA_USE_IMMERSIVE_DARK_MODE, ref value, sizeof(int));
+        }
     }
 
     private async void MainWindow_Loaded(object sender, RoutedEventArgs e)
@@ -77,6 +96,7 @@ public partial class MainWindow : Window
         App.IsDarkTheme = true;
         DarkThemeMenuItem.IsChecked = true;
         LightThemeMenuItem.IsChecked = false;
+        ApplyDarkTitleBar(true);
     }
 
     private void LightTheme_Click(object sender, RoutedEventArgs e)
@@ -84,11 +104,12 @@ public partial class MainWindow : Window
         App.IsDarkTheme = false;
         DarkThemeMenuItem.IsChecked = false;
         LightThemeMenuItem.IsChecked = true;
+        ApplyDarkTitleBar(false);
     }
 
     private async void Settings_Click(object sender, RoutedEventArgs e)
     {
-        var dialog = new SettingsDialog(_viewModel.TcpPort, _viewModel.PipeName, _viewModel.WebSocketPort, _viewModel.DebugMode, _viewModel.MaxLogEntries)
+        var dialog = new SettingsDialog(_viewModel.TcpPort, _viewModel.PipeName, _viewModel.WebSocketPort, _viewModel.DebugMode, _viewModel.MaxLogEntries, _viewModel.ConfirmBeforeClear)
         {
             Owner = this
         };
@@ -102,6 +123,7 @@ public partial class MainWindow : Window
             // Apply settings that don't require restart
             _viewModel.DebugMode = dialog.DebugMode;
             _viewModel.MaxLogEntries = dialog.MaxLogEntries;
+            _viewModel.ConfirmBeforeClear = dialog.ConfirmBeforeClear;
 
             if (portChanged || pipeChanged || wsPortChanged)
             {
@@ -177,6 +199,18 @@ public partial class MainWindow : Window
             {
                 MessageBoxHelper.Show($"Failed to import layout:\n\n{ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
             }
+        }
+    }
+
+    private void ToolBar_Loaded(object sender, RoutedEventArgs e)
+    {
+        if (sender is ToolBar toolBar)
+        {
+            // Hide the overflow button/grip
+            if (toolBar.Template.FindName("OverflowGrid", toolBar) is FrameworkElement overflow)
+                overflow.Visibility = Visibility.Collapsed;
+            if (toolBar.Template.FindName("MainPanelBorder", toolBar) is FrameworkElement mainPanel)
+                mainPanel.Margin = new Thickness(0);
         }
     }
 

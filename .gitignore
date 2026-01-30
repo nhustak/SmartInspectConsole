@@ -33,6 +33,9 @@ Desktop.ini
 *.nul
 nul
 
+# Publish output
+publish/
+
 # Node.js (smartinspect-js)
 node_modules/
 smartinspect-js/dist/

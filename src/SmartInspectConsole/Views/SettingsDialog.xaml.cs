@@ -14,8 +14,9 @@ public partial class SettingsDialog : Window
     public int WebSocketPort { get; private set; }
     public bool DebugMode { get; private set; }
     public int MaxLogEntries { get; private set; }
+    public bool ConfirmBeforeClear { get; private set; }
 
-    public SettingsDialog(int currentPort, string currentPipeName, int currentWebSocketPort, bool debugMode, int maxLogEntries)
+    public SettingsDialog(int currentPort, string currentPipeName, int currentWebSocketPort, bool debugMode, int maxLogEntries, bool confirmBeforeClear)
     {
         InitializeComponent();
         TcpPort = currentPort;
@@ -23,11 +24,13 @@ public partial class SettingsDialog : Window
         WebSocketPort = currentWebSocketPort;
         DebugMode = debugMode;
         MaxLogEntries = maxLogEntries;
+        ConfirmBeforeClear = confirmBeforeClear;
         TcpPortTextBox.Text = currentPort.ToString();
         PipeNameTextBox.Text = currentPipeName;
         WebSocketPortTextBox.Text = currentWebSocketPort.ToString();
         DebugModeCheckBox.IsChecked = debugMode;
         MaxLogEntriesTextBox.Text = maxLogEntries.ToString("N0");
+        ConfirmBeforeClearCheckBox.IsChecked = confirmBeforeClear;
     }
 
     private void OK_Click(object sender, RoutedEventArgs e)
@@ -83,6 +86,7 @@ public partial class SettingsDialog : Window
         PipeName = pipeName;
         WebSocketPort = wsPort;
         DebugMode = DebugModeCheckBox.IsChecked == true;
+        ConfirmBeforeClear = ConfirmBeforeClearCheckBox.IsChecked == true;
         MaxLogEntries = maxLog;
         DialogResult = true;
         Close();

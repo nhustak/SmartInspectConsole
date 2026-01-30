@@ -6,8 +6,10 @@ using System.Windows;
 using System.Windows.Data;
 using System.Windows.Input;
 using System.Windows.Threading;
+using Microsoft.Win32;
 using SmartInspectConsole.Core.Enums;
 using SmartInspectConsole.Core.Events;
+using SmartInspectConsole.Core.FileIO;
 using SmartInspectConsole.Core.Listeners;
 using SmartInspectConsole.Core.Packets;
 using SmartInspectConsole.Helpers;
@@ -58,6 +60,7 @@ public class MainViewModel : ViewModelBase, IDisposable
     private string _pipeName = SmartInspectPipeListener.DefaultPipeName;
     private int _webSocketPort = SmartInspectWebSocketListener.DefaultPort;
     private bool _debugMode = false;
+    private bool _confirmBeforeClear = true;
 
     public MainViewModel()
     {
@@ -109,6 +112,11 @@ public class MainViewModel : ViewModelBase, IDisposable
         MuteAppCommand = new RelayCommand<LogEntry>(MuteApp);
         MuteAllCommand = new RelayCommand(MuteAll);
         UnmuteAllCommand = new RelayCommand(UnmuteAll);
+        RemoveConnectionCommand = new RelayCommand<ConnectedApplication>(RemoveConnection);
+
+        // File I/O commands
+        OpenLogFileCommand = new AsyncRelayCommand(OpenLogFileAsync);
+        SaveLogFileCommand = new AsyncRelayCommand(SaveLogFileAsync, () => LogEntries.Count > 0);
 
         // Detail tab commands
         OpenLogEntryDetailCommand = new RelayCommand<LogEntry>(OpenLogEntryDetail);
@@ -290,6 +298,12 @@ public class MainViewModel : ViewModelBase, IDisposable
         }
     }
 
+    public bool ConfirmBeforeClear
+    {
+        get => _confirmBeforeClear;
+        set => SetProperty(ref _confirmBeforeClear, value);
+    }
+
     #endregion
 
     #region Commands
@@ -300,6 +314,10 @@ public class MainViewModel : ViewModelBase, IDisposable
     public ICommand ClearLogCommand { get; }
     public ICommand ClearWatchesCommand { get; }
     public ICommand ClearProcessFlowCommand { get; }
+
+    // File I/O
+    public ICommand OpenLogFileCommand { get; }
+    public ICommand SaveLogFileCommand { get; }
 
     // Tab management
     public ICommand AddViewCommand { get; }
@@ -319,6 +337,7 @@ public class MainViewModel : ViewModelBase, IDisposable
     public ICommand MuteAppCommand { get; }
     public ICommand MuteAllCommand { get; }
     public ICommand UnmuteAllCommand { get; }
+    public ICommand RemoveConnectionCommand { get; }
 
     // Detail tabs
     public ICommand OpenLogEntryDetailCommand { get; }
@@ -527,13 +546,16 @@ public class MainViewModel : ViewModelBase, IDisposable
         var count = view.FilteredCount;
         if (count == 0) return;
 
-        var result = MessageBoxHelper.Show(
-            $"Clear {count:N0} log entries from view \"{view.Name}\"?",
-            "Clear View",
-            MessageBoxButton.YesNo,
-            MessageBoxImage.Question);
+        if (_confirmBeforeClear)
+        {
+            var result = MessageBoxHelper.Show(
+                $"Clear {count:N0} log entries from view \"{view.Name}\"?",
+                "Clear View",
+                MessageBoxButton.YesNo,
+                MessageBoxImage.Question);
 
-        if (result != MessageBoxResult.Yes) return;
+            if (result != MessageBoxResult.Yes) return;
+        }
 
         view.ClearFilteredEntries();
 
@@ -776,14 +798,47 @@ public class MainViewModel : ViewModelBase, IDisposable
         header.ParseContent();
         var appName = header.AppName ?? "Unknown";
         var hostName = header.HostName ?? "Unknown";
+        var muteKey = $"{appName}@{hostName}";
 
-        // Update connection tracking with app/host info from header
-        if (_connectionsByClientId.TryGetValue(clientId, out var connection))
+        // Check if this client already has a visible connection (shouldn't normally)
+        _connectionsByClientId.TryGetValue(clientId, out var connection);
+
+        // Check if there's already a connection with this app+host identity (reconnect case)
+        var existing = ConnectedApplications.FirstOrDefault(c =>
+            c != connection && c.MuteKey == muteKey);
+
+        if (existing != null)
         {
-            connection.AppName = appName;
-            connection.HostName = hostName;
-            connection.IsMuted = _mutedApps.Contains(connection.MuteKey);
+            if (connection != null)
+            {
+                // Both exist — merge old into new
+                connection.MessageCount += existing.MessageCount;
+            }
+            existing.PropertyChanged -= OnConnectionPropertyChanged;
+            _connectionsByClientId.Remove(existing.ClientId);
+            ConnectedApplications.Remove(existing);
         }
+
+        if (connection == null)
+        {
+            // First time seeing this client — create and add to visible list now
+            connection = new ConnectedApplication
+            {
+                ClientId = clientId,
+                IsConnected = true
+            };
+            connection.PropertyChanged += OnConnectionPropertyChanged;
+            _connectionsByClientId[clientId] = connection;
+            ConnectedApplications.Add(connection);
+
+            // Transfer message count from existing entry if we merged
+            if (existing != null)
+                connection.MessageCount = existing.MessageCount;
+        }
+
+        connection.AppName = appName;
+        connection.HostName = hostName;
+        connection.IsMuted = _mutedApps.Contains(muteKey);
 
         StatusText = $"Client connected: {appName} @ {hostName}";
     }
@@ -792,18 +847,9 @@ public class MainViewModel : ViewModelBase, IDisposable
     {
         Application.Current.Dispatcher.BeginInvoke(() =>
         {
-            var connection = new ConnectedApplication
-            {
-                ClientId = e.ClientId,
-                AppName = e.AppName ?? e.ClientId,
-                HostName = e.HostName ?? "",
-                IsConnected = true
-            };
-            connection.IsMuted = _mutedApps.Contains(connection.MuteKey);
-            connection.PropertyChanged += OnConnectionPropertyChanged;
-
-            _connectionsByClientId[e.ClientId] = connection;
-            ConnectedApplications.Add(connection);
+            // Only track the clientId internally — don't add to visible list yet.
+            // The connection becomes visible when HandleLogHeader identifies it.
+            _connectionsByClientId[e.ClientId] = null!;
 
             StatusText = $"Client connected: {e.ClientId}";
             OnPropertyChanged(nameof(TcpStatus));
@@ -816,25 +862,16 @@ public class MainViewModel : ViewModelBase, IDisposable
     {
         Application.Current.Dispatcher.BeginInvoke(() =>
         {
-            if (_connectionsByClientId.TryGetValue(e.ClientId, out var connection))
+            if (_connectionsByClientId.TryGetValue(e.ClientId, out var connection) && connection != null)
             {
                 connection.IsConnected = false;
                 connection.DisconnectedAt = DateTime.Now;
             }
-
-            // Schedule cleanup of disconnected client after 60 seconds
-            var cleanupTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(60) };
-            var clientId = e.ClientId;
-            cleanupTimer.Tick += (_, _) =>
+            else
             {
-                cleanupTimer.Stop();
-                if (_connectionsByClientId.TryGetValue(clientId, out var conn) && !conn.IsConnected)
-                {
-                    _connectionsByClientId.Remove(clientId);
-                    ConnectedApplications.Remove(conn);
-                }
-            };
-            cleanupTimer.Start();
+                // Never identified — just clean up the tracking entry
+                _connectionsByClientId.Remove(e.ClientId);
+            }
 
             StatusText = $"Client disconnected: {e.ClientId}";
             OnPropertyChanged(nameof(TcpStatus));
@@ -904,6 +941,15 @@ public class MainViewModel : ViewModelBase, IDisposable
         }
     }
 
+    private void RemoveConnection(ConnectedApplication? app)
+    {
+        if (app == null) return;
+        _mutedApps.Remove(app.MuteKey);
+        app.PropertyChanged -= OnConnectionPropertyChanged;
+        _connectionsByClientId.Remove(app.ClientId);
+        ConnectedApplications.Remove(app);
+    }
+
     private void OnError(object? sender, Exception e)
     {
         Application.Current.Dispatcher.BeginInvoke(() =>
@@ -931,13 +977,16 @@ public class MainViewModel : ViewModelBase, IDisposable
         var totalItems = LogEntries.Count + Watches.Count + ProcessFlows.Count;
         if (totalItems == 0) return;
 
-        var result = MessageBoxHelper.Show(
-            $"Clear all data?\n\n• {LogEntries.Count:N0} log entries\n• {Watches.Count:N0} watches\n• {ProcessFlows.Count:N0} process flow entries",
-            "Clear All",
-            MessageBoxButton.YesNo,
-            MessageBoxImage.Question);
+        if (_confirmBeforeClear)
+        {
+            var result = MessageBoxHelper.Show(
+                $"Clear all data?\n\n• {LogEntries.Count:N0} log entries\n• {Watches.Count:N0} watches\n• {ProcessFlows.Count:N0} process flow entries",
+                "Clear All",
+                MessageBoxButton.YesNo,
+                MessageBoxImage.Question);
 
-        if (result != MessageBoxResult.Yes) return;
+            if (result != MessageBoxResult.Yes) return;
+        }
 
         ClearAll();
     }
@@ -946,13 +995,16 @@ public class MainViewModel : ViewModelBase, IDisposable
     {
         if (LogEntries.Count == 0) return;
 
-        var result = MessageBoxHelper.Show(
-            $"Clear {LogEntries.Count:N0} log entries?",
-            "Clear Log",
-            MessageBoxButton.YesNo,
-            MessageBoxImage.Question);
+        if (_confirmBeforeClear)
+        {
+            var result = MessageBoxHelper.Show(
+                $"Clear {LogEntries.Count:N0} log entries?",
+                "Clear Log",
+                MessageBoxButton.YesNo,
+                MessageBoxImage.Question);
 
-        if (result != MessageBoxResult.Yes) return;
+            if (result != MessageBoxResult.Yes) return;
+        }
 
         ClearLog();
     }
@@ -961,13 +1013,16 @@ public class MainViewModel : ViewModelBase, IDisposable
     {
         if (Watches.Count == 0) return;
 
-        var result = MessageBoxHelper.Show(
-            $"Clear {Watches.Count:N0} watches?",
-            "Clear Watches",
-            MessageBoxButton.YesNo,
-            MessageBoxImage.Question);
+        if (_confirmBeforeClear)
+        {
+            var result = MessageBoxHelper.Show(
+                $"Clear {Watches.Count:N0} watches?",
+                "Clear Watches",
+                MessageBoxButton.YesNo,
+                MessageBoxImage.Question);
 
-        if (result != MessageBoxResult.Yes) return;
+            if (result != MessageBoxResult.Yes) return;
+        }
 
         ClearWatches();
     }
@@ -976,13 +1031,16 @@ public class MainViewModel : ViewModelBase, IDisposable
     {
         if (ProcessFlows.Count == 0) return;
 
-        var result = MessageBoxHelper.Show(
-            $"Clear {ProcessFlows.Count:N0} process flow entries?",
-            "Clear Process Flow",
-            MessageBoxButton.YesNo,
-            MessageBoxImage.Question);
+        if (_confirmBeforeClear)
+        {
+            var result = MessageBoxHelper.Show(
+                $"Clear {ProcessFlows.Count:N0} process flow entries?",
+                "Clear Process Flow",
+                MessageBoxButton.YesNo,
+                MessageBoxImage.Question);
 
-        if (result != MessageBoxResult.Yes) return;
+            if (result != MessageBoxResult.Yes) return;
+        }
 
         ClearProcessFlow();
     }
@@ -1062,6 +1120,9 @@ public class MainViewModel : ViewModelBase, IDisposable
         // Developer settings
         state.DebugMode = DebugMode;
 
+        // Behavior
+        state.ConfirmBeforeClear = ConfirmBeforeClear;
+
         // Views
         state.Views.Clear();
         foreach (var view in Views)
@@ -1097,6 +1158,9 @@ public class MainViewModel : ViewModelBase, IDisposable
 
         // Developer settings
         DebugMode = state.DebugMode;
+
+        // Behavior
+        ConfirmBeforeClear = state.ConfirmBeforeClear;
 
         // Restore views if any saved
         if (state.Views.Count > 0)
@@ -1199,6 +1263,129 @@ public class MainViewModel : ViewModelBase, IDisposable
         view.ShowTitleColumn = state.ShowTitleColumn;
         view.ShowThreadColumn = state.ShowThreadColumn;
         view.AutoScroll = state.AutoScroll;
+    }
+
+    #endregion
+
+    #region File I/O
+
+    private async Task OpenLogFileAsync()
+    {
+        var dialog = new OpenFileDialog
+        {
+            Title = "Open SmartInspect Log File",
+            Filter = "SmartInspect Log Files (*.sil)|*.sil|All Files (*.*)|*.*",
+            DefaultExt = ".sil"
+        };
+
+        if (dialog.ShowDialog() != true) return;
+
+        try
+        {
+            StatusText = $"Loading {System.IO.Path.GetFileName(dialog.FileName)}...";
+
+            var reader = new SilFileReader();
+            var packets = await reader.ReadFileAsync(dialog.FileName);
+
+            // Process packets into collections
+            var logEntryCount = 0;
+            var watchCount = 0;
+            var processFlowCount = 0;
+
+            foreach (var packet in packets)
+            {
+                switch (packet)
+                {
+                    case LogEntry logEntry:
+                        // Calculate elapsed time
+                        if (_lastLogEntryTimestamp.HasValue)
+                            logEntry.ElapsedTime = logEntry.Timestamp - _lastLogEntryTimestamp.Value;
+                        _lastLogEntryTimestamp = logEntry.Timestamp;
+
+                        lock (_logEntriesLock)
+                        {
+                            LogEntries.Add(logEntry);
+                        }
+                        TrackAvailableFilterValues(logEntry);
+                        logEntryCount++;
+                        break;
+
+                    case Watch watch:
+                        HandleWatch(watch);
+                        watchCount++;
+                        break;
+
+                    case ProcessFlow processFlow:
+                        lock (_logEntriesLock)
+                        {
+                            ProcessFlows.Add(processFlow);
+                        }
+                        processFlowCount++;
+                        break;
+
+                    case LogHeader logHeader:
+                        logHeader.ParseContent();
+                        break;
+                }
+            }
+
+            // Refresh views
+            foreach (var view in Views)
+            {
+                view.RefreshFilter();
+            }
+            OnPropertyChanged(nameof(EntryCount));
+
+            StatusText = $"Imported {logEntryCount:N0} log entries, {watchCount:N0} watches, {processFlowCount:N0} process flows from {System.IO.Path.GetFileName(dialog.FileName)}";
+        }
+        catch (Exception ex)
+        {
+            StatusText = $"Error loading file: {ex.Message}";
+            MessageBoxHelper.Show($"Failed to open log file:\n\n{ex.Message}", "Error",
+                MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+    }
+
+    private async Task SaveLogFileAsync()
+    {
+        var dialog = new SaveFileDialog
+        {
+            Title = "Save SmartInspect Log File",
+            Filter = "SmartInspect Log Files (*.sil)|*.sil|All Files (*.*)|*.*",
+            DefaultExt = ".sil",
+            FileName = "SmartInspectLog.sil"
+        };
+
+        if (dialog.ShowDialog() != true) return;
+
+        try
+        {
+            StatusText = "Saving log file...";
+
+            // Collect all packets
+            var packets = new List<Packet>();
+
+            lock (_logEntriesLock)
+            {
+                foreach (var entry in LogEntries)
+                    packets.Add(entry);
+                foreach (var watch in Watches)
+                    packets.Add(watch);
+                foreach (var pf in ProcessFlows)
+                    packets.Add(pf);
+            }
+
+            var writer = new SilFileWriter();
+            await writer.WriteFileAsync(dialog.FileName, packets);
+
+            StatusText = $"Exported {packets.Count:N0} packets to {System.IO.Path.GetFileName(dialog.FileName)}";
+        }
+        catch (Exception ex)
+        {
+            StatusText = $"Error saving file: {ex.Message}";
+            MessageBoxHelper.Show($"Failed to save log file:\n\n{ex.Message}", "Error",
+                MessageBoxButton.OK, MessageBoxImage.Error);
+        }
     }
 
     #endregion

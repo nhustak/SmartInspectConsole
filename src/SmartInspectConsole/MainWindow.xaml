@@ -16,6 +16,11 @@
         Background="{DynamicResource BackgroundBrush}"
         Foreground="{DynamicResource ForegroundBrush}">
 
+    <Window.InputBindings>
+        <KeyBinding Key="O" Modifiers="Ctrl" Command="{Binding OpenLogFileCommand}"/>
+        <KeyBinding Key="S" Modifiers="Ctrl" Command="{Binding SaveLogFileCommand}"/>
+    </Window.InputBindings>
+
     <Window.Resources>
         <conv:LogEntryTypeToIconConverter x:Key="LogEntryTypeToIconConverter"/>
         <conv:LogEntryTypeToColorConverter x:Key="LogEntryTypeToColorConverter"/>
@@ -170,6 +175,13 @@
         <!-- Menu -->
         <Menu Grid.Row="0" Background="{DynamicResource SurfaceBrush}" Foreground="{DynamicResource ForegroundBrush}">
             <MenuItem Header="_File">
+                <MenuItem Header="_Open Log File..." Command="{Binding OpenLogFileCommand}" InputGestureText="Ctrl+O">
+                    <MenuItem.Icon><TextBlock Text="&#xE8E5;" FontFamily="Segoe Fluent Icons" FontSize="14"/></MenuItem.Icon>
+                </MenuItem>
+                <MenuItem Header="_Save Log File..." Command="{Binding SaveLogFileCommand}" InputGestureText="Ctrl+S">
+                    <MenuItem.Icon><TextBlock Text="&#xE74E;" FontFamily="Segoe Fluent Icons" FontSize="14"/></MenuItem.Icon>
+                </MenuItem>
+                <Separator/>
                 <MenuItem Header="_Export Layout..." Click="ExportLayout_Click">
                     <MenuItem.Icon><TextBlock Text="&#xE78C;" FontFamily="Segoe Fluent Icons" FontSize="14"/></MenuItem.Icon>
                 </MenuItem>
@@ -235,7 +247,8 @@
 
         <!-- Toolbar -->
         <ToolBarTray Grid.Row="1" Background="{DynamicResource SurfaceBrush}">
-            <ToolBar Background="{DynamicResource SurfaceBrush}" Foreground="{DynamicResource ForegroundBrush}">
+            <ToolBar Background="{DynamicResource SurfaceBrush}" Foreground="{DynamicResource ForegroundBrush}"
+                     ToolBarTray.IsLocked="True" Loaded="ToolBar_Loaded">
                 <Button Command="{Binding StartCommand}" ToolTip="Start Listening">
                     <StackPanel Orientation="Horizontal">
                         <TextBlock Text="&#x25B6;" Foreground="LimeGreen" FontSize="12" Margin="0,0,4,0"/>
@@ -429,6 +442,8 @@
                                 <ListView Grid.Row="1"
                                           x:Name="LogEntryListView"
                                           ItemsSource="{Binding FilteredLogEntries}"
+                                          behaviors:GridViewFillColumnBehavior.FillColumnIndex="5"
+                                          behaviors:GridViewFillColumnBehavior.MinFillWidth="200"
                                           SelectedItem="{Binding SelectedLogEntry}"
                                           SelectionMode="Extended"
                                           VirtualizingPanel.IsVirtualizing="True"
@@ -436,7 +451,8 @@
                                           ScrollViewer.CanContentScroll="True"
                                           MouseDoubleClick="LogEntryList_MouseDoubleClick"
                                           SelectionChanged="LogEntryList_SelectionChanged"
-                                          behaviors:AutoScrollBehavior.AutoScroll="{Binding AutoScroll}">
+                                          behaviors:AutoScrollBehavior.AutoScroll="{Binding AutoScroll}"
+                                          Tag="{Binding DataContext, RelativeSource={RelativeSource AncestorType=TabControl}}">
                                     <ListView.ContextMenu>
                                         <ContextMenu>
                                             <MenuItem Header="Copy Selected" Command="{Binding CopySelectedCommand}" InputGestureText="Ctrl+C">
@@ -447,39 +463,39 @@
                                             </MenuItem>
                                             <Separator/>
                                             <MenuItem Header="Mute App"
-                                                      Command="{Binding DataContext.MuteAppCommand, RelativeSource={RelativeSource AncestorType=TabControl}}"
+                                                      Command="{Binding PlacementTarget.Tag.MuteAppCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
                                                       CommandParameter="{Binding SelectedLogEntry}">
                                                 <MenuItem.Icon><TextBlock Text="&#xE74F;" FontFamily="Segoe Fluent Icons" FontSize="14"/></MenuItem.Icon>
                                             </MenuItem>
                                             <Separator/>
-                                            <MenuItem Header="Add View" Command="{Binding DataContext.AddViewCommand, RelativeSource={RelativeSource AncestorType=TabControl}}">
+                                            <MenuItem Header="Add View" Command="{Binding PlacementTarget.Tag.AddViewCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}">
                                                 <MenuItem.Icon><TextBlock Text="&#xE710;" FontFamily="Segoe Fluent Icons" FontSize="14"/></MenuItem.Icon>
                                             </MenuItem>
-                                            <MenuItem Header="Edit View..." Command="{Binding DataContext.EditViewCommand, RelativeSource={RelativeSource AncestorType=TabControl}}" CommandParameter="{Binding}">
+                                            <MenuItem Header="Edit View..." Command="{Binding PlacementTarget.Tag.EditViewCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}" CommandParameter="{Binding}">
                                                 <MenuItem.Icon><TextBlock Text="&#xE70F;" FontFamily="Segoe Fluent Icons" FontSize="14"/></MenuItem.Icon>
                                             </MenuItem>
-                                            <MenuItem Header="Duplicate View" Command="{Binding DataContext.DuplicateViewCommand, RelativeSource={RelativeSource AncestorType=TabControl}}" CommandParameter="{Binding}">
+                                            <MenuItem Header="Duplicate View" Command="{Binding PlacementTarget.Tag.DuplicateViewCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}" CommandParameter="{Binding}">
                                                 <MenuItem.Icon><TextBlock Text="&#xE8C8;" FontFamily="Segoe Fluent Icons" FontSize="14"/></MenuItem.Icon>
                                             </MenuItem>
-                                            <MenuItem Header="Remove View" Command="{Binding DataContext.RemoveViewCommand, RelativeSource={RelativeSource AncestorType=TabControl}}" CommandParameter="{Binding}">
+                                            <MenuItem Header="Remove View" Command="{Binding PlacementTarget.Tag.RemoveViewCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}" CommandParameter="{Binding}">
                                                 <MenuItem.Icon><TextBlock Text="&#xE74D;" FontFamily="Segoe Fluent Icons" FontSize="14"/></MenuItem.Icon>
                                             </MenuItem>
                                             <Separator/>
-                                            <MenuItem Header="Clear View Log" Command="{Binding DataContext.ClearViewLogCommand, RelativeSource={RelativeSource AncestorType=TabControl}}" CommandParameter="{Binding}"
+                                            <MenuItem Header="Clear View Log" Command="{Binding PlacementTarget.Tag.ClearViewLogCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}" CommandParameter="{Binding}"
                                                       ToolTip="Clear only the log entries visible in this view">
                                                 <MenuItem.Icon><TextBlock Text="&#xE894;" FontFamily="Segoe Fluent Icons" FontSize="14"/></MenuItem.Icon>
                                             </MenuItem>
-                                            <MenuItem Header="Clear All Logs" Command="{Binding DataContext.ClearLogCommand, RelativeSource={RelativeSource AncestorType=TabControl}}"
+                                            <MenuItem Header="Clear All Logs" Command="{Binding PlacementTarget.Tag.ClearLogCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
                                                       ToolTip="Clear all log entries from all views">
                                                 <MenuItem.Icon><TextBlock Text="&#xE74D;" FontFamily="Segoe Fluent Icons" FontSize="14"/></MenuItem.Icon>
                                             </MenuItem>
                                             <Separator/>
                                             <MenuItem Header="Show Panels">
                                                 <MenuItem.Icon><TextBlock Text="&#xE8A0;" FontFamily="Segoe Fluent Icons" FontSize="14"/></MenuItem.Icon>
-                                                <MenuItem Header="Connections" IsCheckable="True" IsChecked="{Binding DataContext.ShowConnectionsPanel, RelativeSource={RelativeSource AncestorType=TabControl}}"/>
-                                                <MenuItem Header="Watches" IsCheckable="True" IsChecked="{Binding DataContext.ShowWatchesPanel, RelativeSource={RelativeSource AncestorType=TabControl}}"/>
-                                                <MenuItem Header="Process Flow" IsCheckable="True" IsChecked="{Binding DataContext.ShowProcessFlowPanel, RelativeSource={RelativeSource AncestorType=TabControl}}"/>
-                                                <MenuItem Header="Details" IsCheckable="True" IsChecked="{Binding DataContext.ShowDetailsPanel, RelativeSource={RelativeSource AncestorType=TabControl}}"/>
+                                                <MenuItem Header="Connections" IsCheckable="True" IsChecked="{Binding PlacementTarget.Tag.ShowConnectionsPanel, RelativeSource={RelativeSource AncestorType=ContextMenu}}"/>
+                                                <MenuItem Header="Watches" IsCheckable="True" IsChecked="{Binding PlacementTarget.Tag.ShowWatchesPanel, RelativeSource={RelativeSource AncestorType=ContextMenu}}"/>
+                                                <MenuItem Header="Process Flow" IsCheckable="True" IsChecked="{Binding PlacementTarget.Tag.ShowProcessFlowPanel, RelativeSource={RelativeSource AncestorType=ContextMenu}}"/>
+                                                <MenuItem Header="Details" IsCheckable="True" IsChecked="{Binding PlacementTarget.Tag.ShowDetailsPanel, RelativeSource={RelativeSource AncestorType=ContextMenu}}"/>
                                             </MenuItem>
                                         </ContextMenu>
                                     </ListView.ContextMenu>
@@ -506,13 +522,13 @@
                                                             Width="{Binding ShowElapsedColumn, Converter={StaticResource BoolToColumnWidthConverter}, ConverterParameter=70}"
                                                             DisplayMemberBinding="{Binding ElapsedTimeFormatted}"/>
                                             <GridViewColumn Header="App"
-                                                            Width="{Binding ShowAppColumn, Converter={StaticResource BoolToColumnWidthConverter}, ConverterParameter=100}"
+                                                            Width="{Binding ShowAppColumn, Converter={StaticResource BoolToColumnWidthConverter}, ConverterParameter=160}"
                                                             DisplayMemberBinding="{Binding AppName}"/>
                                             <GridViewColumn Header="Session"
                                                             Width="{Binding ShowSessionColumn, Converter={StaticResource BoolToColumnWidthConverter}, ConverterParameter=80}"
                                                             DisplayMemberBinding="{Binding SessionName}"/>
                                             <GridViewColumn Header="Title"
-                                                            Width="{Binding ShowTitleColumn, Converter={StaticResource BoolToColumnWidthConverter}, ConverterParameter=350}">
+                                                            Width="{Binding ShowTitleColumn, Converter={StaticResource BoolToColumnWidthConverter}, ConverterParameter=200}">
                                                 <GridViewColumn.CellTemplate>
                                                     <DataTemplate>
                                                         <Grid>
@@ -622,6 +638,12 @@
                                             <MenuItem Header="Unmute All"
                                                       Command="{Binding PlacementTarget.Tag.UnmuteAllCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}">
                                                 <MenuItem.Icon><TextBlock Text="&#xE767;" FontFamily="Segoe Fluent Icons" FontSize="14"/></MenuItem.Icon>
+                                            </MenuItem>
+                                            <Separator/>
+                                            <MenuItem Header="Remove"
+                                                      Command="{Binding PlacementTarget.Tag.RemoveConnectionCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                                      CommandParameter="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource AncestorType=ContextMenu}}">
+                                                <MenuItem.Icon><TextBlock Text="&#xE74D;" FontFamily="Segoe Fluent Icons" FontSize="14"/></MenuItem.Icon>
                                             </MenuItem>
                                         </ContextMenu>
                                     </Setter.Value>

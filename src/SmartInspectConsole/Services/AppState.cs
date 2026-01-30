@@ -45,6 +45,9 @@ public class AppState
     // Developer settings
     public bool DebugMode { get; set; } = false;
 
+    // Behavior
+    public bool ConfirmBeforeClear { get; set; } = true;
+
     // Connection Manager
     public bool ShowConnectionsPanel { get; set; } = true;
     public List<string> MutedApplications { get; set; } = new();
