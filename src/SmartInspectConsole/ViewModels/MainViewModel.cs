@@ -30,7 +30,7 @@ public class MainViewModel : ViewModelBase, IDisposable
     private readonly object _logEntriesLock = new();
 
     // Batching for high-throughput scenarios
-    private readonly ConcurrentQueue<LogEntry> _pendingLogEntries = new();
+    private readonly ConcurrentQueue<(LogEntry LogEntry, string ClientId)> _pendingLogEntries = new();
     private readonly ConcurrentQueue<Watch> _pendingWatches = new();
     private readonly ConcurrentQueue<ProcessFlow> _pendingProcessFlows = new();
     private readonly DispatcherTimer _batchTimer;
@@ -622,7 +622,7 @@ public class MainViewModel : ViewModelBase, IDisposable
         switch (e.Packet)
         {
             case LogEntry logEntry:
-                _pendingLogEntries.Enqueue(logEntry);
+                _pendingLogEntries.Enqueue((logEntry, e.ClientId));
                 break;
 
             case Watch watch:
@@ -651,10 +651,12 @@ public class MainViewModel : ViewModelBase, IDisposable
         var processFlowsProcessed = 0;
 
         // Process log entries in batch
-        while (logEntriesProcessed < MaxBatchSize && _pendingLogEntries.TryDequeue(out var logEntry))
+        while (logEntriesProcessed < MaxBatchSize && _pendingLogEntries.TryDequeue(out var pending))
         {
-            // Update connection message count (even for muted apps)
-            IncrementConnectionMessageCount(logEntry.AppName, logEntry.HostName);
+            var logEntry = pending.LogEntry;
+
+            // Update connection: sync AppName from log entry and increment message count
+            UpdateConnectionFromLogEntry(pending.ClientId, logEntry.AppName, logEntry.HostName);
 
             // Skip muted apps - discard before adding to collection
             var muteKey = $"{logEntry.AppName}@{logEntry.HostName}";
@@ -880,13 +882,36 @@ public class MainViewModel : ViewModelBase, IDisposable
         });
     }
 
-    private void IncrementConnectionMessageCount(string appName, string hostName)
+    private void UpdateConnectionFromLogEntry(string clientId, string appName, string hostName)
     {
-        foreach (var conn in ConnectedApplications)
+        // First try to find connection by clientId (most reliable)
+        if (!string.IsNullOrEmpty(clientId) && _connectionsByClientId.TryGetValue(clientId, out var conn))
         {
-            if (conn.AppName == appName && conn.HostName == hostName)
+            // Update the connection's AppName if the log entry has a different name than the LogHeader
+            if (!string.IsNullOrEmpty(appName) && conn.AppName != appName)
             {
-                conn.MessageCount++;
+                var oldMuteKey = conn.MuteKey;
+                conn.AppName = appName;
+                conn.HostName = hostName;
+
+                // Update mute tracking if the key changed
+                if (_mutedApps.Contains(oldMuteKey))
+                {
+                    _mutedApps.Remove(oldMuteKey);
+                    _mutedApps.Add(conn.MuteKey);
+                }
+            }
+
+            conn.MessageCount++;
+            return;
+        }
+
+        // Fallback: match by AppName + HostName
+        foreach (var connection in ConnectedApplications)
+        {
+            if (connection.AppName == appName && connection.HostName == hostName)
+            {
+                connection.MessageCount++;
                 return;
             }
         }
@@ -968,7 +993,7 @@ public class MainViewModel : ViewModelBase, IDisposable
                 ViewerId = ViewerId.Data,
                 Color = System.Drawing.Color.FromArgb(255, 200, 80, 80)
             };
-            _pendingLogEntries.Enqueue(errorEntry);
+            _pendingLogEntries.Enqueue((errorEntry, string.Empty));
         });
     }
 
