@@ -19,9 +19,9 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <UseWPF>true</UseWPF>
-    <Version>1.0.0.29</Version>
-    <AssemblyVersion>1.0.0.29</AssemblyVersion>
-    <FileVersion>1.0.0.29</FileVersion>
+    <Version>1.0.0.30</Version>
+    <AssemblyVersion>1.0.0.30</AssemblyVersion>
+    <FileVersion>1.0.0.30</FileVersion>
     <Product>SmartInspect Console</Product>
     <Company>Nick Hustak</Company>
     <Copyright>Copyright (c) 2026 Nick Hustak</Copyright>

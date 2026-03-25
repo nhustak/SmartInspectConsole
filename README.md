@@ -6,7 +6,7 @@ This project exists because the original SmartInspect Console never really got t
 
 Claude got this project moving. Codex is now my tool of choice for all of my development.
 
-You still need the actual SmartInspect product and you should buy it:
+You still need the actual SmartInspect product and you absolutely should buy it. It is one of the most useful tools I have ever used, and this project exists because the tool itself is that good:
 [https://code-partners.com/offerings/smartinspect/](https://code-partners.com/offerings/smartinspect/)
 
 ## Current State
