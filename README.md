@@ -1,10 +1,12 @@
-# SmartInspect Console
+# SmartInspect Console v1.0.0.48
+
+Last updated: 2026-03-25
 
 A modern Windows console for SmartInspect logs with live filtering, multi-view analysis, browser ingestion, and production-grade load handling.
 
 This project exists because the original SmartInspect Console never really got the refresh it deserved. SmartInspect itself is still one of the most useful tools in the box, and this app is meant to make those logs far easier to work with in 2026.
 
-Claude got this project moving. Codex is now my tool of choice for all of my development.
+This project is now being driven with Codex, which is my tool of choice for development work on this codebase.
 
 You still need the actual SmartInspect product and you absolutely should buy it. It is one of the most useful tools I have ever used, and this project exists because the tool itself is that good:
 [https://code-partners.com/offerings/smartinspect/](https://code-partners.com/offerings/smartinspect/)
@@ -259,6 +261,7 @@ That starts the existing load tester in a visible PowerShell window against the 
 - The Connections panel only shows clients once they are identified by client metadata such as `LogHeader`. Raw transport counts can be higher than the visible identified connection list.
 - WebSocket clients may be connected before they have sent enough identifying data to appear by application name in the Connections panel.
 - Import/export of `.sil` files is supported in the desktop app, but memory-buffer crash retrieval workflows are still not implemented end-to-end.
+- There is currently no deployment pipeline, installer, or pre-compiled release package included in this repository yet. At the moment, you build and run it from source.
 
 ## Requirements
 

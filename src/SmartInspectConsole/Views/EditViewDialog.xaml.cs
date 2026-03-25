@@ -75,11 +75,35 @@ public partial class EditViewDialog : Window
         }
     }
 
+    private void RemoveAppTag_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is ToggleButton button && button.DataContext is string value)
+        {
+            ViewModel.RemoveAppSelection(value);
+        }
+    }
+
+    private void RemoveSessionTag_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is ToggleButton button && button.DataContext is string value)
+        {
+            ViewModel.RemoveSessionSelection(value);
+        }
+    }
+
     private void HostnameTag_Click(object sender, RoutedEventArgs e)
     {
         if (sender is ToggleButton button && button.DataContext is FilterOption option)
         {
             ViewModel.ToggleHostnameSelection(option);
+        }
+    }
+
+    private void RemoveHostnameTag_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is ToggleButton button && button.DataContext is string value)
+        {
+            ViewModel.RemoveHostnameSelection(value);
         }
     }
 }

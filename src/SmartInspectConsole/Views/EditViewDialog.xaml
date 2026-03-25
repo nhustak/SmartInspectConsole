@@ -85,15 +85,6 @@
             </Setter>
         </Style>
 
-        <Style x:Key="SelectedFilterChipBorder" TargetType="Border">
-            <Setter Property="Background" Value="#1976D2"/>
-            <Setter Property="BorderBrush" Value="#1565C0"/>
-            <Setter Property="BorderThickness" Value="1"/>
-            <Setter Property="CornerRadius" Value="4"/>
-            <Setter Property="Margin" Value="2,0,2,4"/>
-            <Setter Property="Padding" Value="10,4"/>
-        </Style>
-
     </Window.Resources>
 
     <DockPanel Margin="16">
@@ -127,9 +118,14 @@
                                 </ItemsControl.ItemsPanel>
                                 <ItemsControl.ItemTemplate>
                                     <DataTemplate>
-                                        <Border Style="{StaticResource SelectedFilterChipBorder}">
-                                            <TextBlock Text="{Binding}" Foreground="White"/>
-                                        </Border>
+                                        <ToggleButton Style="{StaticResource TagToggleButton}"
+                                                      IsChecked="True"
+                                                      Click="RemoveAppTag_Click">
+                                            <StackPanel Orientation="Horizontal">
+                                                <TextBlock Text="{Binding}"/>
+                                                <TextBlock Text=" ×" FontWeight="Bold"/>
+                                            </StackPanel>
+                                        </ToggleButton>
                                     </DataTemplate>
                                 </ItemsControl.ItemTemplate>
                             </ItemsControl>
@@ -166,9 +162,14 @@
                                 </ItemsControl.ItemsPanel>
                                 <ItemsControl.ItemTemplate>
                                     <DataTemplate>
-                                        <Border Style="{StaticResource SelectedFilterChipBorder}">
-                                            <TextBlock Text="{Binding}" Foreground="White"/>
-                                        </Border>
+                                        <ToggleButton Style="{StaticResource TagToggleButton}"
+                                                      IsChecked="True"
+                                                      Click="RemoveSessionTag_Click">
+                                            <StackPanel Orientation="Horizontal">
+                                                <TextBlock Text="{Binding}"/>
+                                                <TextBlock Text=" ×" FontWeight="Bold"/>
+                                            </StackPanel>
+                                        </ToggleButton>
                                     </DataTemplate>
                                 </ItemsControl.ItemTemplate>
                             </ItemsControl>
@@ -205,9 +206,14 @@
                                 </ItemsControl.ItemsPanel>
                                 <ItemsControl.ItemTemplate>
                                     <DataTemplate>
-                                        <Border Style="{StaticResource SelectedFilterChipBorder}">
-                                            <TextBlock Text="{Binding}" Foreground="White"/>
-                                        </Border>
+                                        <ToggleButton Style="{StaticResource TagToggleButton}"
+                                                      IsChecked="True"
+                                                      Click="RemoveHostnameTag_Click">
+                                            <StackPanel Orientation="Horizontal">
+                                                <TextBlock Text="{Binding}"/>
+                                                <TextBlock Text=" ×" FontWeight="Bold"/>
+                                            </StackPanel>
+                                        </ToggleButton>
                                     </DataTemplate>
                                 </ItemsControl.ItemTemplate>
                             </ItemsControl>

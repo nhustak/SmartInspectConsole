@@ -384,6 +384,28 @@ public class EditViewViewModel : ViewModelBase
         HostnameFilter = BuildFilterFromSelection(AvailableHostnames);
     }
 
+    public void RemoveAppSelection(string value)
+    {
+        AppFilter = RemoveValueFromFilter(AppFilter, value);
+    }
+
+    public void RemoveSessionSelection(string value)
+    {
+        SessionFilter = RemoveValueFromFilter(SessionFilter, value);
+    }
+
+    public void RemoveHostnameSelection(string value)
+    {
+        HostnameFilter = RemoveValueFromFilter(HostnameFilter, value);
+    }
+
+    private static string RemoveValueFromFilter(string filter, string valueToRemove)
+    {
+        var remaining = SplitFilterValues(filter)
+            .Where(value => !value.Equals(valueToRemove, StringComparison.OrdinalIgnoreCase));
+        return string.Join(", ", remaining);
+    }
+
     #endregion
 
     #region Load/Save from LogViewViewModel
