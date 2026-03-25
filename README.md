@@ -22,6 +22,20 @@ SmartInspect Console is a WPF replacement for the original Gurock SmartInspect C
 
 The desktop app now includes an in-app load test launcher under `Help > Run Load Test`.
 
+## Screenshots
+
+Drop screenshots into [docs/images](C:\Project\Utility\SmartInspectConsole\docs\images) and keep them in the repo so the README can render them directly on GitHub.
+
+Recommended captures:
+
+- main desktop window
+- detail payload viewer
+- connections / watches / process flow panels
+- settings dialog
+- load test running against the console
+
+I will rename and place the actual images in the README once the files are there.
+
 ## Highlights
 
 ### Log Ingestion
