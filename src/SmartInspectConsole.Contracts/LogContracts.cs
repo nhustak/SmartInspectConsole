@@ -111,3 +111,9 @@ public sealed record FlaggedEntryDto
     public required bool IsTrimmedFromLiveStore { get; init; }
     public required FlaggedEntrySnapshotDto EntrySnapshot { get; init; }
 }
+
+public sealed record UnflagEntryResultDto
+{
+    public required string EntryId { get; init; }
+    public required bool Success { get; init; }
+}

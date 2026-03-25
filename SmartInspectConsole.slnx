@@ -3,6 +3,7 @@
     <Project Path="src/SmartInspectConsole.Contracts/SmartInspectConsole.Contracts.csproj" />
     <Project Path="src/SmartInspectConsole.Backend/SmartInspectConsole.Backend.csproj" />
     <Project Path="src/SmartInspectConsole.Core/SmartInspectConsole.Core.csproj" />
+    <Project Path="src/SmartInspectConsole.Mcp/SmartInspectConsole.Mcp.csproj" />
     <Project Path="src/SmartInspectConsole/SmartInspectConsole.csproj" />
     <Project Path="src/SmartInspectConsole.LoadTester/SmartInspectConsole.LoadTester.csproj" />
   </Folder>
