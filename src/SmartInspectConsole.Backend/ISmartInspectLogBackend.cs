@@ -23,6 +23,9 @@ public interface ISmartInspectLogBackend
     LogEntryDto? GetLogEntry(string entryId, bool includeData);
     IReadOnlyList<ApplicationSummaryDto> ListApplications(bool connectedOnly = false, bool mutedOnly = false);
     LiveContextDto GetLiveContext();
+    FlaggedEntryDto FlagEntry(FlagEntryRequest request);
+    bool UnflagEntry(string entryId);
+    IReadOnlyList<FlaggedEntryDto> ListFlaggedEntries(string? category = null, int limit = 100);
 
     void RemoveLogEntries(IEnumerable<LogEntry> entries);
     void ClearLog();

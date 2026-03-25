@@ -12,6 +12,7 @@ public sealed record LogQueryRequest
     public string? Cursor { get; init; }
     public int Limit { get; init; } = 100;
     public bool IncludeData { get; init; }
+    public bool FlaggedOnly { get; init; }
 }
 
 public sealed record LogQueryResponse
@@ -41,6 +42,7 @@ public sealed record LogEntryDto
     public required string Title { get; init; }
     public string? DataText { get; init; }
     public required bool HasData { get; init; }
+    public required bool IsFlagged { get; init; }
 }
 
 public sealed record ApplicationSummaryDto
@@ -80,4 +82,32 @@ public sealed record LiveContextDto
     public required long TotalReceived { get; init; }
     public required long TotalRetained { get; init; }
     public required long TotalDroppedByRetention { get; init; }
+}
+
+public sealed record FlagEntryRequest
+{
+    public required string EntryId { get; init; }
+    public string? Category { get; init; }
+    public string? Reason { get; init; }
+}
+
+public sealed record FlaggedEntrySnapshotDto
+{
+    public required DateTime TimestampUtc { get; init; }
+    public required string AppName { get; init; }
+    public required string SessionName { get; init; }
+    public required string HostName { get; init; }
+    public required string Title { get; init; }
+    public required string Type { get; init; }
+    public string? DataText { get; init; }
+}
+
+public sealed record FlaggedEntryDto
+{
+    public required string EntryId { get; init; }
+    public required DateTime FlaggedAtUtc { get; init; }
+    public string? Category { get; init; }
+    public string? Reason { get; init; }
+    public required bool IsTrimmedFromLiveStore { get; init; }
+    public required FlaggedEntrySnapshotDto EntrySnapshot { get; init; }
 }

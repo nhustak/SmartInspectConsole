@@ -11,6 +11,7 @@ public sealed class SmartInspectLogBackend : ISmartInspectLogBackend
     private readonly Dictionary<LogEntry, string> _entryIdsByPacket = new();
     private readonly Dictionary<string, ApplicationRuntimeState> _applicationsByClientId = new(StringComparer.Ordinal);
     private readonly Dictionary<string, ApplicationRuntimeState> _applicationsByKey = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, FlaggedEntryState> _flaggedEntriesById = new(StringComparer.Ordinal);
     private readonly Dictionary<string, Watch> _watchesByName = new(StringComparer.OrdinalIgnoreCase);
     private readonly List<ProcessFlow> _processFlows = [];
     private readonly Dictionary<string, ListenerRuntimeState> _listeners = new(StringComparer.OrdinalIgnoreCase);
@@ -208,7 +209,7 @@ public sealed class SmartInspectLogBackend : ISmartInspectLogBackend
                     continue;
                 }
 
-                if (!Matches(stored.Packet, appNames, sessionNames, hostNames, processIds, threadIds, levels, request.Text))
+                if (!MatchesQuery(stored, appNames, sessionNames, hostNames, processIds, threadIds, levels, request.Text, request.FlaggedOnly))
                 {
                     continue;
                 }
@@ -225,15 +226,16 @@ public sealed class SmartInspectLogBackend : ISmartInspectLogBackend
             if (items.Count > 0)
             {
                 var lastSequence = items[^1].Sequence;
-                hasMore = _entries.Any(e => e.Sequence < lastSequence && Matches(
-                    e.Packet,
+                hasMore = _entries.Any(e => e.Sequence < lastSequence && MatchesQuery(
+                    e,
                     appNames,
                     sessionNames,
                     hostNames,
                     processIds,
                     threadIds,
                     levels,
-                    request.Text));
+                    request.Text,
+                    request.FlaggedOnly));
 
                 if (hasMore)
                 {
@@ -321,6 +323,57 @@ public sealed class SmartInspectLogBackend : ISmartInspectLogBackend
         }
     }
 
+    public FlaggedEntryDto FlagEntry(FlagEntryRequest request)
+    {
+        lock (_sync)
+        {
+            if (!_entriesById.TryGetValue(request.EntryId, out var stored))
+            {
+                throw new InvalidOperationException($"Entry '{request.EntryId}' was not found in the live log store.");
+            }
+
+            if (!_flaggedEntriesById.TryGetValue(request.EntryId, out var flagged))
+            {
+                flagged = new FlaggedEntryState
+                {
+                    EntryId = request.EntryId,
+                    FlaggedAtUtc = DateTime.UtcNow,
+                    Snapshot = CreateFlagSnapshot(stored)
+                };
+                _flaggedEntriesById[request.EntryId] = flagged;
+            }
+
+            flagged.Category = request.Category;
+            flagged.Reason = request.Reason;
+            flagged.IsTrimmedFromLiveStore = false;
+            flagged.Snapshot = CreateFlagSnapshot(stored);
+
+            return ToFlaggedDto(flagged);
+        }
+    }
+
+    public bool UnflagEntry(string entryId)
+    {
+        lock (_sync)
+        {
+            return _flaggedEntriesById.Remove(entryId);
+        }
+    }
+
+    public IReadOnlyList<FlaggedEntryDto> ListFlaggedEntries(string? category = null, int limit = 100)
+    {
+        lock (_sync)
+        {
+            var appliedLimit = NormalizeLimit(limit);
+            return _flaggedEntriesById.Values
+                .Where(flagged => string.IsNullOrWhiteSpace(category) || string.Equals(flagged.Category, category, StringComparison.OrdinalIgnoreCase))
+                .OrderByDescending(flagged => flagged.FlaggedAtUtc)
+                .Take(appliedLimit)
+                .Select(ToFlaggedDto)
+                .ToList();
+        }
+    }
+
     public void RemoveLogEntries(IEnumerable<LogEntry> entries)
     {
         lock (_sync)
@@ -335,6 +388,11 @@ public sealed class SmartInspectLogBackend : ISmartInspectLogBackend
                 _entryIdsByPacket.Remove(entry);
                 if (_entriesById.Remove(entryId, out var stored))
                 {
+                    if (_flaggedEntriesById.TryGetValue(entryId, out var flagged))
+                    {
+                        flagged.IsTrimmedFromLiveStore = true;
+                    }
+
                     _entries.Remove(stored);
                 }
             }
@@ -345,6 +403,11 @@ public sealed class SmartInspectLogBackend : ISmartInspectLogBackend
     {
         lock (_sync)
         {
+            foreach (var flagged in _flaggedEntriesById.Values)
+            {
+                flagged.IsTrimmedFromLiveStore = true;
+            }
+
             _entries.Clear();
             _entriesById.Clear();
             _entryIdsByPacket.Clear();
@@ -443,6 +506,25 @@ public sealed class SmartInspectLogBackend : ISmartInspectLogBackend
         return entry.DataAsString?.Contains(text, StringComparison.OrdinalIgnoreCase) ?? false;
     }
 
+    private bool MatchesQuery(
+        StoredLogEntry stored,
+        HashSet<string>? appNames,
+        HashSet<string>? sessionNames,
+        HashSet<string>? hostNames,
+        HashSet<int>? processIds,
+        HashSet<int>? threadIds,
+        HashSet<string>? levels,
+        string? text,
+        bool flaggedOnly)
+    {
+        if (flaggedOnly && !_flaggedEntriesById.ContainsKey(stored.EntryId))
+        {
+            return false;
+        }
+
+        return Matches(stored.Packet, appNames, sessionNames, hostNames, processIds, threadIds, levels, text);
+    }
+
     private LogEntryDto ToDto(StoredLogEntry stored, bool includeData)
     {
         return new LogEntryDto
@@ -461,7 +543,35 @@ public sealed class SmartInspectLogBackend : ISmartInspectLogBackend
             ThreadId = stored.Packet.ThreadId,
             Title = stored.Packet.Title,
             DataText = includeData ? stored.Packet.DataAsString : null,
-            HasData = stored.Packet.Data is { Length: > 0 }
+            HasData = stored.Packet.Data is { Length: > 0 },
+            IsFlagged = _flaggedEntriesById.ContainsKey(stored.EntryId)
+        };
+    }
+
+    private static FlaggedEntrySnapshotDto CreateFlagSnapshot(StoredLogEntry stored)
+    {
+        return new FlaggedEntrySnapshotDto
+        {
+            TimestampUtc = stored.Packet.Timestamp,
+            AppName = stored.Packet.AppName,
+            SessionName = stored.Packet.SessionName,
+            HostName = stored.Packet.HostName,
+            Title = stored.Packet.Title,
+            Type = stored.Packet.LogEntryType.ToString(),
+            DataText = stored.Packet.DataAsString
+        };
+    }
+
+    private static FlaggedEntryDto ToFlaggedDto(FlaggedEntryState flagged)
+    {
+        return new FlaggedEntryDto
+        {
+            EntryId = flagged.EntryId,
+            FlaggedAtUtc = flagged.FlaggedAtUtc,
+            Category = flagged.Category,
+            Reason = flagged.Reason,
+            IsTrimmedFromLiveStore = flagged.IsTrimmedFromLiveStore,
+            EntrySnapshot = flagged.Snapshot
         };
     }
 
@@ -508,6 +618,11 @@ public sealed class SmartInspectLogBackend : ISmartInspectLogBackend
         while (_entries.Count > _maxLogEntries)
         {
             var removed = _entries[0];
+            if (_flaggedEntriesById.TryGetValue(removed.EntryId, out var flagged))
+            {
+                flagged.IsTrimmedFromLiveStore = true;
+            }
+
             _entries.RemoveAt(0);
             _entriesById.Remove(removed.EntryId);
             _entryIdsByPacket.Remove(removed.Packet);
@@ -542,5 +657,15 @@ public sealed class SmartInspectLogBackend : ISmartInspectLogBackend
         public bool Enabled { get; set; }
         public string Endpoint { get; set; } = string.Empty;
         public int ClientCount { get; set; }
+    }
+
+    private sealed class FlaggedEntryState
+    {
+        public string EntryId { get; set; } = string.Empty;
+        public DateTime FlaggedAtUtc { get; set; }
+        public string? Category { get; set; }
+        public string? Reason { get; set; }
+        public bool IsTrimmedFromLiveStore { get; set; }
+        public FlaggedEntrySnapshotDto Snapshot { get; set; } = default!;
     }
 }

@@ -64,6 +64,24 @@ public sealed class LocalApiHost : IAsyncDisposable
 
         app.MapGet("/api/local/v1/context/live", () => Results.Ok(_backend.GetLiveContext()));
 
+        app.MapGet("/api/local/v1/flags", (string? category, int? limit) =>
+            Results.Ok(_backend.ListFlaggedEntries(category, limit ?? 100)));
+
+        app.MapPost("/api/local/v1/flags", (FlagEntryRequest request) =>
+        {
+            try
+            {
+                return Results.Ok(_backend.FlagEntry(request));
+            }
+            catch (InvalidOperationException ex)
+            {
+                return Results.NotFound(new { error = ex.Message });
+            }
+        });
+
+        app.MapDelete("/api/local/v1/flags/{entryId}", (string entryId) =>
+            _backend.UnflagEntry(entryId) ? Results.NoContent() : Results.NotFound());
+
         _app = app;
         await _app.StartAsync(cancellationToken);
     }
