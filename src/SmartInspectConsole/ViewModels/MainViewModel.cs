@@ -9,6 +9,7 @@ using System.Windows.Data;
 using System.Windows.Input;
 using System.Windows.Threading;
 using Microsoft.Win32;
+using SmartInspectConsole.Backend;
 using SmartInspectConsole.Core.Enums;
 using SmartInspectConsole.Core.Events;
 using SmartInspectConsole.Core.FileIO;
@@ -31,6 +32,7 @@ public class MainViewModel : ViewModelBase, IDisposable
     private SmartInspectPipeListener? _pipeListener;
     private SmartInspectWebSocketListener? _webSocketListener;
     private readonly object _logEntriesLock = new();
+    private readonly ISmartInspectLogBackend _backend;
 
     // Batching for high-throughput scenarios
     private readonly ConcurrentQueue<(LogEntry LogEntry, string ClientId)> _pendingLogEntries = new();
@@ -85,6 +87,11 @@ public class MainViewModel : ViewModelBase, IDisposable
 
     public MainViewModel()
     {
+        _backend = new SmartInspectLogBackend(new SmartInspectBackendOptions
+        {
+            MaxLogEntries = _maxLogEntries
+        });
+
         // Initialize collections
         LogEntries = new BulkObservableCollection<LogEntry>();
         Watches = new BulkObservableCollection<Watch>();
@@ -169,6 +176,7 @@ public class MainViewModel : ViewModelBase, IDisposable
     public ObservableCollection<string> AvailableAppNames { get; } = new();
     public ObservableCollection<string> AvailableSessions { get; } = new();
     public ObservableCollection<string> AvailableHostnames { get; } = new();
+    public ISmartInspectLogBackend Backend => _backend;
 
     public LogEntryDetailViewModel? SelectedDetailTab
     {
@@ -281,7 +289,13 @@ public class MainViewModel : ViewModelBase, IDisposable
     public int MaxLogEntries
     {
         get => _maxLogEntries;
-        set => SetProperty(ref _maxLogEntries, Math.Max(1000, value));
+        set
+        {
+            if (SetProperty(ref _maxLogEntries, Math.Max(1000, value)))
+            {
+                _backend.MaxLogEntries = _maxLogEntries;
+            }
+        }
     }
 
     public int TcpPort
@@ -453,6 +467,7 @@ public class MainViewModel : ViewModelBase, IDisposable
                 _webSocketListener.StartAsync());
 
             IsListening = true;
+            UpdateBackendListenerStatuses();
             StatusText = "Listening for connections...";
         }
         catch (Exception ex)
@@ -482,6 +497,7 @@ public class MainViewModel : ViewModelBase, IDisposable
             await Task.WhenAll(tasks);
 
             IsListening = false;
+            UpdateBackendListenerStatuses();
             StatusText = "Stopped";
         }
         catch (Exception ex)
@@ -589,7 +605,8 @@ public class MainViewModel : ViewModelBase, IDisposable
     {
         if (view == null) return;
 
-        var count = view.FilteredCount;
+        var entriesToRemove = view.GetFilteredEntriesSnapshot();
+        var count = entriesToRemove.Count;
         if (count == 0) return;
 
         if (_confirmBeforeClear)
@@ -603,9 +620,30 @@ public class MainViewModel : ViewModelBase, IDisposable
             if (result != MessageBoxResult.Yes) return;
         }
 
-        view.ClearFilteredEntries();
+        _backend.RemoveLogEntries(entriesToRemove);
+
+        lock (_logEntriesLock)
+        {
+            foreach (var entry in entriesToRemove)
+            {
+                LogEntries.Remove(entry);
+            }
+        }
+
+        var removedEntries = entriesToRemove.ToHashSet();
+        var detailTabsToRemove = DetailTabs.Where(detail => removedEntries.Contains(detail.LogEntry)).ToList();
+        foreach (var detailTab in detailTabsToRemove)
+        {
+            DetailTabs.Remove(detailTab);
+        }
+
+        if (SelectedDetailTab != null && !DetailTabs.Contains(SelectedDetailTab))
+        {
+            SelectedDetailTab = DetailTabs.LastOrDefault();
+        }
 
         OnPropertyChanged(nameof(EntryCount));
+        OnPropertyChanged(nameof(HasDetailTabs));
     }
 
     #endregion
@@ -665,14 +703,17 @@ public class MainViewModel : ViewModelBase, IDisposable
                 _pendingLogEntries.Enqueue((logEntry, e.ClientId));
                 Interlocked.Increment(ref _totalLogEntriesReceived);
                 UpdateQueueHighWaterMark(_pendingLogEntries.Count);
+                UpdateBackendQueueDepth();
                 break;
 
             case Watch watch:
                 _pendingWatches.Enqueue(watch);
+                UpdateBackendQueueDepth();
                 break;
 
             case ProcessFlow processFlow:
                 _pendingProcessFlows.Enqueue(processFlow);
+                UpdateBackendQueueDepth();
                 break;
 
             case ControlCommand controlCommand:
@@ -731,6 +772,7 @@ public class MainViewModel : ViewModelBase, IDisposable
                     LogEntries.Add(logEntry);
                 }
 
+                _backend.AppendLogEntry(logEntry, pending.ClientId);
                 TrackAvailableFilterValues(logEntry, newAppNames, newSessions, newHostNames);
                 logEntriesProcessed++;
                 logEntriesAdded++;
@@ -748,6 +790,9 @@ public class MainViewModel : ViewModelBase, IDisposable
                 {
                     var trimTarget = Math.Max(1000, (int)Math.Floor(_maxLogEntries * TrimTargetRetentionRatio));
                     var excess = LogEntries.Count - trimTarget;
+                    var entriesToTrim = LogEntries.Take(excess).ToList();
+                    _backend.RemoveLogEntries(entriesToTrim);
+
                     if (LogEntries is BulkObservableCollection<LogEntry> bulkLogEntries)
                     {
                         bulkLogEntries.RemoveFirstRange(excess);
@@ -770,10 +815,7 @@ public class MainViewModel : ViewModelBase, IDisposable
             // Process process flows in batch
             while (processFlowsProcessed < maxBatchSize && _pendingProcessFlows.TryDequeue(out var processFlow))
             {
-                lock (_logEntriesLock)
-                {
-                    ProcessFlows.Add(processFlow);
-                }
+                HandleProcessFlow(processFlow);
                 processFlowsProcessed++;
             }
 
@@ -793,6 +835,7 @@ public class MainViewModel : ViewModelBase, IDisposable
         {
             batchStopwatch.Stop();
             UpdateDiagnostics(logEntriesProcessed + watchesProcessed + processFlowsProcessed, batchStopwatch.Elapsed.TotalMilliseconds);
+            UpdateBackendQueueDepth();
             _isProcessingPendingItems = false;
 
             if (_pendingLogEntries.Count >= ImmediateDrainThreshold || _pendingWatches.Count >= ImmediateDrainThreshold || _pendingProcessFlows.Count >= ImmediateDrainThreshold)
@@ -828,6 +871,8 @@ public class MainViewModel : ViewModelBase, IDisposable
 
     private void HandleWatch(Watch watch)
     {
+        _backend.UpsertWatch(watch);
+
         lock (_logEntriesLock)
         {
             // Update existing watch or add new one
@@ -848,6 +893,8 @@ public class MainViewModel : ViewModelBase, IDisposable
 
     private void HandleProcessFlow(ProcessFlow processFlow)
     {
+        _backend.AppendProcessFlow(processFlow);
+
         lock (_logEntriesLock)
         {
             ProcessFlows.Add(processFlow);
@@ -879,6 +926,7 @@ public class MainViewModel : ViewModelBase, IDisposable
     private void HandleLogHeader(LogHeader header, string clientId)
     {
         header.ParseContent();
+        _backend.RecordLogHeader(clientId, header);
         var appName = header.AppName ?? "Unknown";
         var hostName = header.HostName ?? "Unknown";
         var muteKey = $"{appName}@{hostName}";
@@ -930,6 +978,8 @@ public class MainViewModel : ViewModelBase, IDisposable
     {
         Application.Current.Dispatcher.BeginInvoke(() =>
         {
+            _backend.RecordClientConnected(e.ClientId, GetTransportName(sender));
+
             // Only track the clientId internally — don't add to visible list yet.
             // The connection becomes visible when HandleLogHeader identifies it.
             _connectionsByClientId[e.ClientId] = null!;
@@ -938,6 +988,7 @@ public class MainViewModel : ViewModelBase, IDisposable
             OnPropertyChanged(nameof(TcpStatus));
             OnPropertyChanged(nameof(PipeStatus));
             OnPropertyChanged(nameof(WebSocketStatus));
+            UpdateBackendListenerStatuses();
         });
     }
 
@@ -945,6 +996,8 @@ public class MainViewModel : ViewModelBase, IDisposable
     {
         Application.Current.Dispatcher.BeginInvoke(() =>
         {
+            _backend.RecordClientDisconnected(e.ClientId);
+
             if (_connectionsByClientId.TryGetValue(e.ClientId, out var connection) && connection != null)
             {
                 connection.IsConnected = false;
@@ -960,6 +1013,7 @@ public class MainViewModel : ViewModelBase, IDisposable
             OnPropertyChanged(nameof(TcpStatus));
             OnPropertyChanged(nameof(PipeStatus));
             OnPropertyChanged(nameof(WebSocketStatus));
+            UpdateBackendListenerStatuses();
         });
     }
 
@@ -1063,6 +1117,8 @@ public class MainViewModel : ViewModelBase, IDisposable
                 _mutedApps.Add(app.MuteKey);
             else
                 _mutedApps.Remove(app.MuteKey);
+
+            _backend.SetApplicationMuted(app.MuteKey, app.IsMuted);
         }
     }
 
@@ -1077,6 +1133,7 @@ public class MainViewModel : ViewModelBase, IDisposable
         if (logEntry == null) return;
         var muteKey = $"{logEntry.AppName}@{logEntry.HostName}";
         _mutedApps.Add(muteKey);
+        _backend.SetApplicationMuted(muteKey, true);
 
         // Also update the connection if it exists
         foreach (var conn in ConnectedApplications)
@@ -1092,6 +1149,7 @@ public class MainViewModel : ViewModelBase, IDisposable
         {
             conn.IsMuted = true;
             _mutedApps.Add(conn.MuteKey);
+            _backend.SetApplicationMuted(conn.MuteKey, true);
         }
     }
 
@@ -1101,6 +1159,7 @@ public class MainViewModel : ViewModelBase, IDisposable
         foreach (var conn in ConnectedApplications)
         {
             conn.IsMuted = false;
+            _backend.SetApplicationMuted(conn.MuteKey, false);
         }
     }
 
@@ -1108,6 +1167,7 @@ public class MainViewModel : ViewModelBase, IDisposable
     {
         if (app == null) return;
         _mutedApps.Remove(app.MuteKey);
+        _backend.RemoveApplication(app.ClientId, app.MuteKey);
         app.PropertyChanged -= OnConnectionPropertyChanged;
         _connectionsByClientId.Remove(app.ClientId);
         ConnectedApplications.Remove(app);
@@ -1218,6 +1278,7 @@ public class MainViewModel : ViewModelBase, IDisposable
     private void ClearLog()
     {
         _lastLogEntryTimestamp = null;
+        _backend.ClearLog();
 
         lock (_logEntriesLock)
         {
@@ -1245,6 +1306,8 @@ public class MainViewModel : ViewModelBase, IDisposable
 
     private void ClearWatches()
     {
+        _backend.ClearWatches();
+
         lock (_logEntriesLock)
         {
             Watches.Clear();
@@ -1253,6 +1316,8 @@ public class MainViewModel : ViewModelBase, IDisposable
 
     private void ClearProcessFlow()
     {
+        _backend.ClearProcessFlow();
+
         lock (_logEntriesLock)
         {
             ProcessFlows.Clear();
@@ -1477,6 +1542,7 @@ public class MainViewModel : ViewModelBase, IDisposable
                         {
                             LogEntries.Add(logEntry);
                         }
+                        _backend.AppendLogEntry(logEntry, string.Empty);
                         TrackAvailableFilterValues(logEntry, newAppNames, newSessions, newHostNames);
                         logEntryCount++;
                         break;
@@ -1487,10 +1553,7 @@ public class MainViewModel : ViewModelBase, IDisposable
                         break;
 
                     case ProcessFlow processFlow:
-                        lock (_logEntriesLock)
-                        {
-                            ProcessFlows.Add(processFlow);
-                        }
+                        HandleProcessFlow(processFlow);
                         processFlowCount++;
                         break;
 
@@ -1678,6 +1741,29 @@ public class MainViewModel : ViewModelBase, IDisposable
             MaxObservedLogQueueDepth = _maxObservedLogQueueDepth
         };
         DiagnosticsText = DiagnosticsSnapshot.ToString();
+    }
+
+    private void UpdateBackendQueueDepth()
+    {
+        _backend.SetQueueDepth(_pendingLogEntries.Count + _pendingWatches.Count + _pendingProcessFlows.Count);
+    }
+
+    private void UpdateBackendListenerStatuses()
+    {
+        _backend.SetListenerStatus("tcp", IsListening && _tcpListener != null, $"tcp://127.0.0.1:{_tcpPort}", _tcpListener?.ClientCount ?? 0);
+        _backend.SetListenerStatus("pipe", IsListening && _pipeListener != null, $"pipe://{_pipeName}", _pipeListener?.ClientCount ?? 0);
+        _backend.SetListenerStatus("websocket", IsListening && _webSocketListener != null, $"ws://127.0.0.1:{_webSocketPort}", _webSocketListener?.ClientCount ?? 0);
+    }
+
+    private static string GetTransportName(object? sender)
+    {
+        return sender switch
+        {
+            SmartInspectTcpListener => "tcp",
+            SmartInspectPipeListener => "pipe",
+            SmartInspectWebSocketListener => "websocket",
+            _ => "unknown"
+        };
     }
 
     private void UpdateQueueHighWaterMark(int queueDepth)

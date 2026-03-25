@@ -1,7 +1,13 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <ItemGroup>
+    <ProjectReference Include="..\SmartInspectConsole.Contracts\SmartInspectConsole.Contracts.csproj" />
+    <ProjectReference Include="..\SmartInspectConsole.Backend\SmartInspectConsole.Backend.csproj" />
     <ProjectReference Include="..\SmartInspectConsole.Core\SmartInspectConsole.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
   </ItemGroup>
 
   <ItemGroup>
@@ -19,9 +25,9 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <UseWPF>true</UseWPF>
-    <Version>1.0.0.59</Version>
-    <AssemblyVersion>1.0.0.59</AssemblyVersion>
-    <FileVersion>1.0.0.59</FileVersion>
+    <Version>1.0.0.60</Version>
+    <AssemblyVersion>1.0.0.60</AssemblyVersion>
+    <FileVersion>1.0.0.60</FileVersion>
     <Product>SmartInspect Console</Product>
     <Company>Nick Hustak</Company>
     <Copyright>Copyright (c) 2026 Nick Hustak</Copyright>

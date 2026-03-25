@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <Version>1.0.0</Version>
+    <AssemblyVersion>1.0.0.0</AssemblyVersion>
+    <FileVersion>1.0.0.0</FileVersion>
+    <Product>SmartInspect Console Contracts</Product>
+    <Company>Nick Hustak</Company>
+    <Copyright>Copyright (c) 2026 Nick Hustak</Copyright>
+    <Description>Shared contracts for SmartInspect Console backend, local API, and MCP</Description>
+  </PropertyGroup>
+
+</Project>

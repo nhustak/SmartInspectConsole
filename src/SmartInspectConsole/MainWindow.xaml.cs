@@ -4,6 +4,7 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Interop;
 using Microsoft.Win32;
+using SmartInspectConsole.Backend;
 using SmartInspectConsole.Core.Packets;
 using SmartInspectConsole.Helpers;
 using SmartInspectConsole.Services;
@@ -18,6 +19,7 @@ namespace SmartInspectConsole;
 public partial class MainWindow : Window
 {
     private readonly MainViewModel _viewModel;
+    private readonly LocalApiHost _localApiHost;
 
     [DllImport("dwmapi.dll")]
     private static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int value, int size);
@@ -28,6 +30,7 @@ public partial class MainWindow : Window
     {
         InitializeComponent();
         _viewModel = new MainViewModel();
+        _localApiHost = new LocalApiHost(_viewModel.Backend);
         DataContext = _viewModel;
 
         // Restore full application state
@@ -58,6 +61,8 @@ public partial class MainWindow : Window
         DarkThemeMenuItem.IsChecked = App.IsDarkTheme;
         LightThemeMenuItem.IsChecked = !App.IsDarkTheme;
 
+        await _localApiHost.StartAsync();
+
         // Auto-start listening
         await _viewModel.StartAsync();
     }
@@ -71,6 +76,7 @@ public partial class MainWindow : Window
         _viewModel.SaveStateTo(state);
         state.Save();
 
+        await _localApiHost.DisposeAsync();
         await _viewModel.StopAsync();
     }
 

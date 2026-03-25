@@ -659,6 +659,11 @@ public class LogViewViewModel : ViewModelBase
         RecountFilteredEntries();
     }
 
+    public List<LogEntry> GetFilteredEntriesSnapshot()
+    {
+        return FilteredLogEntries.Cast<LogEntry>().ToList();
+    }
+
     /// <summary>
     /// Clears only the log entries that are currently visible in this view's filter.
     /// </summary>
