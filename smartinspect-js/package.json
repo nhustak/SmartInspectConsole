@@ -1,6 +1,6 @@
 {
   "name": "smartinspect-js",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "description": "SmartInspect logging client for browser-based JavaScript/TypeScript applications",
   "main": "dist/smartinspect.umd.js",
   "module": "dist/smartinspect.esm.js",
@@ -10,7 +10,8 @@
       "import": "./dist/smartinspect.esm.js",
       "require": "./dist/smartinspect.umd.js",
       "types": "./dist/index.d.ts"
-    }
+    },
+    "./package.json": "./package.json"
   },
   "files": [
     "dist"
