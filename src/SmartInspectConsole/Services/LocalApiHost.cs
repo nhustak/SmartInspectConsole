@@ -50,8 +50,8 @@ public sealed class LocalApiHost : IAsyncDisposable
             runId = _backend.RunId
         }));
 
-        app.MapGet("/api/local/v1/applications", (bool connectedOnly, bool mutedOnly) =>
-            Results.Ok(_backend.ListApplications(connectedOnly, mutedOnly)));
+        app.MapGet("/api/local/v1/applications", (bool? connectedOnly, bool? mutedOnly) =>
+            Results.Ok(_backend.ListApplications(connectedOnly ?? false, mutedOnly ?? false)));
 
         app.MapPost("/api/local/v1/logs/query", (LogQueryRequest request) =>
             Results.Ok(_backend.QueryLogs(request)));

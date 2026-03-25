@@ -61,7 +61,6 @@ public sealed class SmartInspectLogBackend : ISmartInspectLogBackend
             var application = GetOrCreateApplicationState(clientId, entry.AppName, entry.HostName);
             application.MessageCount++;
             application.LastSeenUtc = entry.Timestamp;
-            application.IsConnected = true;
 
             var sequence = ++_nextSequence;
             var entryId = $"{_runId}:{sequence}";
@@ -484,7 +483,6 @@ public sealed class SmartInspectLogBackend : ISmartInspectLogBackend
         if (_applicationsByKey.TryGetValue(applicationKey, out var existingByKey))
         {
             existingByKey.ClientId = clientId;
-            existingByKey.IsConnected = true;
             existingByKey.ConnectedAtUtc ??= DateTime.UtcNow;
             _applicationsByClientId[clientId] = existingByKey;
             return existingByKey;

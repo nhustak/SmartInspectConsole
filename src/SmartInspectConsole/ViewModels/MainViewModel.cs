@@ -763,7 +763,8 @@ public class MainViewModel : ViewModelBase, IDisposable
                 // Calculate elapsed time
                 if (_lastLogEntryTimestamp.HasValue)
                 {
-                    logEntry.ElapsedTime = logEntry.Timestamp - _lastLogEntryTimestamp.Value;
+                    var elapsed = logEntry.Timestamp - _lastLogEntryTimestamp.Value;
+                    logEntry.ElapsedTime = elapsed < TimeSpan.Zero ? TimeSpan.Zero : elapsed;
                 }
                 _lastLogEntryTimestamp = logEntry.Timestamp;
 
@@ -1535,7 +1536,10 @@ public class MainViewModel : ViewModelBase, IDisposable
                     case LogEntry logEntry:
                         // Calculate elapsed time
                         if (_lastLogEntryTimestamp.HasValue)
-                            logEntry.ElapsedTime = logEntry.Timestamp - _lastLogEntryTimestamp.Value;
+                        {
+                            var elapsed = logEntry.Timestamp - _lastLogEntryTimestamp.Value;
+                            logEntry.ElapsedTime = elapsed < TimeSpan.Zero ? TimeSpan.Zero : elapsed;
+                        }
                         _lastLogEntryTimestamp = logEntry.Timestamp;
 
                         lock (_logEntriesLock)
