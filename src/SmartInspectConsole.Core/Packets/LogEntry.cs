@@ -8,6 +8,10 @@ namespace SmartInspectConsole.Core.Packets;
 /// </summary>
 public class LogEntry : Packet
 {
+    private byte[]? _data;
+    private string? _dataAsString;
+    private bool _hasDecodedData;
+
     /// <summary>
     /// The fixed header size for LogEntry packets (48 bytes).
     /// </summary>
@@ -48,7 +52,16 @@ public class LogEntry : Packet
     /// <summary>
     /// Gets or sets the binary data payload.
     /// </summary>
-    public byte[]? Data { get; set; }
+    public byte[]? Data
+    {
+        get => _data;
+        set
+        {
+            _data = value;
+            _dataAsString = null;
+            _hasDecodedData = false;
+        }
+    }
 
     /// <summary>
     /// Gets or sets the process ID.
@@ -94,5 +107,16 @@ public class LogEntry : Packet
     /// <summary>
     /// Gets the data as a UTF-8 string if available.
     /// </summary>
-    public string? DataAsString => Data != null ? System.Text.Encoding.UTF8.GetString(Data) : null;
+    public string? DataAsString
+    {
+        get
+        {
+            if (_hasDecodedData)
+                return _dataAsString;
+
+            _dataAsString = _data != null ? System.Text.Encoding.UTF8.GetString(_data) : null;
+            _hasDecodedData = true;
+            return _dataAsString;
+        }
+    }
 }

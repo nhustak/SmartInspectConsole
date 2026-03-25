@@ -7,3 +7,7 @@
 
 ## Project directories
 - C:\Project\SmartInspectConsole
+
+## Local workflow
+- Before running the app for validation, shut down any currently running `SmartInspectConsole` process.
+- When asked to prepare and run the app, increment the application version by one revision (`x.y.z.n` -> `x.y.z.(n+1)`), build, and start the updated app.

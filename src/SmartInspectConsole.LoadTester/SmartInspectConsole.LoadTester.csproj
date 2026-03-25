@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="..\SmartInspectConsole.Core\SmartInspectConsole.Core.csproj" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net9.0-windows</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AssemblyName>SmartInspectConsole.LoadTester</AssemblyName>
+    <RootNamespace>SmartInspectConsole.LoadTester</RootNamespace>
+  </PropertyGroup>
+
+</Project>

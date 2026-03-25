@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
+using System.Diagnostics;
 using System.Reflection;
 using System.Windows;
 using System.Windows.Data;
@@ -12,6 +13,7 @@ using SmartInspectConsole.Core.Events;
 using SmartInspectConsole.Core.FileIO;
 using SmartInspectConsole.Core.Listeners;
 using SmartInspectConsole.Core.Packets;
+using SmartInspectConsole.Collections;
 using SmartInspectConsole.Helpers;
 using SmartInspectConsole.Models;
 using SmartInspectConsole.Services;
@@ -35,10 +37,17 @@ public class MainViewModel : ViewModelBase, IDisposable
     private readonly ConcurrentQueue<ProcessFlow> _pendingProcessFlows = new();
     private readonly DispatcherTimer _batchTimer;
     private const int BatchIntervalMs = 50; // Process batches every 50ms
-    private const int MaxBatchSize = 500;   // Max items per batch
+    private const int BaseBatchSize = 500;
+    private const int MediumBatchSize = 1500;
+    private const int HighBatchSize = 5000;
+    private const int ImmediateDrainThreshold = 2000;
+    private const int MediumBacklogThreshold = 10000;
+    private const int HighBacklogThreshold = 50000;
+    private const double TrimTargetRetentionRatio = 0.90;
 
     private DateTime? _lastLogEntryTimestamp;
     private string _statusText = "Ready";
+    private string _diagnosticsText = "Queues L:0 W:0 P:0";
     private bool _isListening;
     private LogViewViewModel? _selectedView;
     private int _viewCounter = 1;
@@ -53,7 +62,18 @@ public class MainViewModel : ViewModelBase, IDisposable
     // Connection Manager
     private readonly Dictionary<string, ConnectedApplication> _connectionsByClientId = new();
     private readonly HashSet<string> _mutedApps = new();
-    private int _maxLogEntries = 100_000;
+    private readonly HashSet<string> _availableAppNameSet = new(StringComparer.OrdinalIgnoreCase);
+    private readonly HashSet<string> _availableSessionSet = new(StringComparer.OrdinalIgnoreCase);
+    private readonly HashSet<string> _availableHostNameSet = new(StringComparer.OrdinalIgnoreCase);
+    private int _maxLogEntries = 20_000;
+    private bool _isProcessingPendingItems;
+    private bool _immediateDrainScheduled;
+    private long _totalLogEntriesReceived;
+    private long _totalLogEntriesRendered;
+    private long _totalWatchUpdatesRendered;
+    private long _totalProcessFlowsRendered;
+    private int _maxObservedLogQueueDepth;
+    private BatchDiagnosticsSnapshot _diagnosticsSnapshot = new();
 
     // Network settings
     private int _tcpPort = SmartInspectTcpListener.DefaultPort;
@@ -65,9 +85,9 @@ public class MainViewModel : ViewModelBase, IDisposable
     public MainViewModel()
     {
         // Initialize collections
-        LogEntries = new ObservableCollection<LogEntry>();
-        Watches = new ObservableCollection<Watch>();
-        ProcessFlows = new ObservableCollection<ProcessFlow>();
+        LogEntries = new BulkObservableCollection<LogEntry>();
+        Watches = new BulkObservableCollection<Watch>();
+        ProcessFlows = new BulkObservableCollection<ProcessFlow>();
         Views = new ObservableCollection<LogViewViewModel>();
         DetailTabs = new ObservableCollection<LogEntryDetailViewModel>();
 
@@ -180,6 +200,18 @@ public class MainViewModel : ViewModelBase, IDisposable
     {
         get => _statusText;
         set => SetProperty(ref _statusText, value);
+    }
+
+    public string DiagnosticsText
+    {
+        get => _diagnosticsText;
+        private set => SetProperty(ref _diagnosticsText, value);
+    }
+
+    public BatchDiagnosticsSnapshot DiagnosticsSnapshot
+    {
+        get => _diagnosticsSnapshot;
+        private set => SetProperty(ref _diagnosticsSnapshot, value);
     }
 
     public bool IsListening
@@ -535,7 +567,10 @@ public class MainViewModel : ViewModelBase, IDisposable
 
         if (dialog.ShowDialog() == true)
         {
-            editViewModel.SaveTo(view);
+            using (view.DeferRefresh())
+            {
+                editViewModel.SaveTo(view);
+            }
         }
     }
 
@@ -558,12 +593,6 @@ public class MainViewModel : ViewModelBase, IDisposable
         }
 
         view.ClearFilteredEntries();
-
-        // Update all views since we modified the shared collection
-        foreach (var v in Views)
-        {
-            v.RefreshFilter();
-        }
 
         OnPropertyChanged(nameof(EntryCount));
     }
@@ -623,6 +652,8 @@ public class MainViewModel : ViewModelBase, IDisposable
         {
             case LogEntry logEntry:
                 _pendingLogEntries.Enqueue((logEntry, e.ClientId));
+                Interlocked.Increment(ref _totalLogEntriesReceived);
+                UpdateQueueHighWaterMark(_pendingLogEntries.Count);
                 break;
 
             case Watch watch:
@@ -646,102 +677,141 @@ public class MainViewModel : ViewModelBase, IDisposable
 
     private void ProcessPendingItems(object? sender, EventArgs e)
     {
+        if (_isProcessingPendingItems)
+            return;
+
+        _isProcessingPendingItems = true;
         var logEntriesProcessed = 0;
+        var logEntriesAdded = 0;
         var watchesProcessed = 0;
         var processFlowsProcessed = 0;
+        var batchStopwatch = Stopwatch.StartNew();
+        var connectionUpdates = new Dictionary<string, PendingConnectionUpdate>(StringComparer.Ordinal);
+        var newAppNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var newSessions = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var newHostNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var maxBatchSize = GetAdaptiveBatchSize();
 
-        // Process log entries in batch
-        while (logEntriesProcessed < MaxBatchSize && _pendingLogEntries.TryDequeue(out var pending))
+        try
         {
-            var logEntry = pending.LogEntry;
-
-            // Update connection: sync AppName from log entry and increment message count
-            UpdateConnectionFromLogEntry(pending.ClientId, logEntry.AppName, logEntry.HostName);
-
-            // Skip muted apps - discard before adding to collection
-            var muteKey = $"{logEntry.AppName}@{logEntry.HostName}";
-            if (_mutedApps.Contains(muteKey))
+            // Process log entries in batch
+            while (logEntriesProcessed < maxBatchSize && _pendingLogEntries.TryDequeue(out var pending))
             {
+                var logEntry = pending.LogEntry;
+                AccumulateConnectionUpdate(connectionUpdates, pending.ClientId, logEntry.AppName, logEntry.HostName);
+
+                // Skip muted apps - discard before adding to collection
+                var muteKey = $"{logEntry.AppName}@{logEntry.HostName}";
+                if (_mutedApps.Contains(muteKey))
+                {
+                    logEntriesProcessed++;
+                    continue;
+                }
+
+                // Calculate elapsed time
+                if (_lastLogEntryTimestamp.HasValue)
+                {
+                    logEntry.ElapsedTime = logEntry.Timestamp - _lastLogEntryTimestamp.Value;
+                }
+                _lastLogEntryTimestamp = logEntry.Timestamp;
+
+                lock (_logEntriesLock)
+                {
+                    LogEntries.Add(logEntry);
+                }
+
+                TrackAvailableFilterValues(logEntry, newAppNames, newSessions, newHostNames);
                 logEntriesProcessed++;
-                continue;
+                logEntriesAdded++;
             }
 
-            // Calculate elapsed time
-            if (_lastLogEntryTimestamp.HasValue)
+            ApplyConnectionUpdates(connectionUpdates);
+            AddNewFilterValues(AvailableAppNames, newAppNames);
+            AddNewFilterValues(AvailableSessions, newSessions);
+            AddNewFilterValues(AvailableHostnames, newHostNames);
+
+            // Trim oldest entries if over the cap
+            if (LogEntries.Count > _maxLogEntries)
             {
-                logEntry.ElapsedTime = logEntry.Timestamp - _lastLogEntryTimestamp.Value;
+                lock (_logEntriesLock)
+                {
+                    var trimTarget = Math.Max(1000, (int)Math.Floor(_maxLogEntries * TrimTargetRetentionRatio));
+                    var excess = LogEntries.Count - trimTarget;
+                    if (LogEntries is BulkObservableCollection<LogEntry> bulkLogEntries)
+                    {
+                        bulkLogEntries.RemoveFirstRange(excess);
+                    }
+                    else
+                    {
+                        for (var i = 0; i < excess; i++)
+                            LogEntries.RemoveAt(0);
+                    }
+                }
             }
-            _lastLogEntryTimestamp = logEntry.Timestamp;
 
-            lock (_logEntriesLock)
+            // Process watches in batch
+            while (watchesProcessed < maxBatchSize && _pendingWatches.TryDequeue(out var watch))
             {
-                LogEntries.Add(logEntry);
+                HandleWatch(watch);
+                watchesProcessed++;
             }
 
-            TrackAvailableFilterValues(logEntry);
-            logEntriesProcessed++;
+            // Process process flows in batch
+            while (processFlowsProcessed < maxBatchSize && _pendingProcessFlows.TryDequeue(out var processFlow))
+            {
+                lock (_logEntriesLock)
+                {
+                    ProcessFlows.Add(processFlow);
+                }
+                processFlowsProcessed++;
+            }
+
+            if (logEntriesProcessed > 0)
+            {
+                Interlocked.Add(ref _totalLogEntriesRendered, logEntriesAdded);
+                OnPropertyChanged(nameof(EntryCount));
+            }
+
+            if (watchesProcessed > 0)
+                Interlocked.Add(ref _totalWatchUpdatesRendered, watchesProcessed);
+
+            if (processFlowsProcessed > 0)
+                Interlocked.Add(ref _totalProcessFlowsRendered, processFlowsProcessed);
         }
-
-        // Trim oldest entries if over the cap
-        if (LogEntries.Count > _maxLogEntries)
+        finally
         {
-            lock (_logEntriesLock)
+            batchStopwatch.Stop();
+            UpdateDiagnostics(logEntriesProcessed + watchesProcessed + processFlowsProcessed, batchStopwatch.Elapsed.TotalMilliseconds);
+            _isProcessingPendingItems = false;
+
+            if (_pendingLogEntries.Count >= ImmediateDrainThreshold || _pendingWatches.Count >= ImmediateDrainThreshold || _pendingProcessFlows.Count >= ImmediateDrainThreshold)
             {
-                var excess = LogEntries.Count - _maxLogEntries;
-                for (var i = 0; i < excess; i++)
-                    LogEntries.RemoveAt(0);
+                ScheduleImmediateDrain();
             }
-        }
-
-        // Process watches in batch
-        while (watchesProcessed < MaxBatchSize && _pendingWatches.TryDequeue(out var watch))
-        {
-            HandleWatch(watch);
-            watchesProcessed++;
-        }
-
-        // Process process flows in batch
-        while (processFlowsProcessed < MaxBatchSize && _pendingProcessFlows.TryDequeue(out var processFlow))
-        {
-            lock (_logEntriesLock)
-            {
-                ProcessFlows.Add(processFlow);
-            }
-            processFlowsProcessed++;
-        }
-
-        // Only refresh views if we processed something
-        if (logEntriesProcessed > 0)
-        {
-            foreach (var view in Views)
-            {
-                view.RefreshFilter();
-            }
-            OnPropertyChanged(nameof(EntryCount));
         }
     }
 
-    private void TrackAvailableFilterValues(LogEntry logEntry)
+    private void TrackAvailableFilterValues(LogEntry logEntry, HashSet<string> newAppNames, HashSet<string> newSessions, HashSet<string> newHostNames)
     {
         // Track app names
         if (!string.IsNullOrWhiteSpace(logEntry.AppName) &&
-            !AvailableAppNames.Contains(logEntry.AppName))
+            _availableAppNameSet.Add(logEntry.AppName))
         {
-            AvailableAppNames.Add(logEntry.AppName);
+            newAppNames.Add(logEntry.AppName);
         }
 
         // Track session names
         if (!string.IsNullOrWhiteSpace(logEntry.SessionName) &&
-            !AvailableSessions.Contains(logEntry.SessionName))
+            _availableSessionSet.Add(logEntry.SessionName))
         {
-            AvailableSessions.Add(logEntry.SessionName);
+            newSessions.Add(logEntry.SessionName);
         }
 
         // Track hostnames
         if (!string.IsNullOrWhiteSpace(logEntry.HostName) &&
-            !AvailableHostnames.Contains(logEntry.HostName))
+            _availableHostNameSet.Add(logEntry.HostName))
         {
-            AvailableHostnames.Add(logEntry.HostName);
+            newHostNames.Add(logEntry.HostName);
         }
     }
 
@@ -917,6 +987,63 @@ public class MainViewModel : ViewModelBase, IDisposable
         }
     }
 
+    private void AccumulateConnectionUpdate(Dictionary<string, PendingConnectionUpdate> updates, string clientId, string appName, string hostName)
+    {
+        var key = !string.IsNullOrWhiteSpace(clientId) ? clientId : $"{appName}@{hostName}";
+        if (!updates.TryGetValue(key, out var update))
+        {
+            update = new PendingConnectionUpdate
+            {
+                ClientId = clientId,
+                AppName = appName,
+                HostName = hostName
+            };
+            updates[key] = update;
+        }
+
+        update.AppName = string.IsNullOrWhiteSpace(appName) ? update.AppName : appName;
+        update.HostName = string.IsNullOrWhiteSpace(hostName) ? update.HostName : hostName;
+        update.MessageCount++;
+    }
+
+    private void ApplyConnectionUpdates(Dictionary<string, PendingConnectionUpdate> updates)
+    {
+        foreach (var update in updates.Values)
+        {
+            if (!string.IsNullOrEmpty(update.ClientId) && _connectionsByClientId.TryGetValue(update.ClientId, out var connection))
+            {
+                if (connection != null)
+                {
+                    if (!string.IsNullOrEmpty(update.AppName) && connection.AppName != update.AppName)
+                    {
+                        var oldMuteKey = connection.MuteKey;
+                        connection.AppName = update.AppName;
+                        connection.HostName = update.HostName;
+
+                        if (_mutedApps.Contains(oldMuteKey))
+                        {
+                            _mutedApps.Remove(oldMuteKey);
+                            _mutedApps.Add(connection.MuteKey);
+                        }
+                    }
+
+                    connection.MessageCount += update.MessageCount;
+                }
+
+                continue;
+            }
+
+            foreach (var fallbackConnection in ConnectedApplications)
+            {
+                if (fallbackConnection.AppName == update.AppName && fallbackConnection.HostName == update.HostName)
+                {
+                    fallbackConnection.MessageCount += update.MessageCount;
+                    break;
+                }
+            }
+        }
+    }
+
     private void OnConnectionPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
     {
         if (e.PropertyName == nameof(ConnectedApplication.IsMuted) && sender is ConnectedApplication app)
@@ -1088,6 +1215,9 @@ public class MainViewModel : ViewModelBase, IDisposable
         }
 
         // Clear available filter values
+        _availableAppNameSet.Clear();
+        _availableSessionSet.Clear();
+        _availableHostNameSet.Clear();
         AvailableAppNames.Clear();
         AvailableSessions.Clear();
         AvailableHostnames.Clear();
@@ -1174,7 +1304,7 @@ public class MainViewModel : ViewModelBase, IDisposable
         _mutedApps.Clear();
         foreach (var muted in state.MutedApplications)
             _mutedApps.Add(muted);
-        MaxLogEntries = state.MaxLogEntries > 0 ? state.MaxLogEntries : 100_000;
+        MaxLogEntries = state.MaxLogEntries > 0 ? state.MaxLogEntries : 20_000;
 
         // Network settings
         TcpPort = state.TcpPort > 0 ? state.TcpPort : SmartInspectTcpListener.DefaultPort;
@@ -1248,46 +1378,48 @@ public class MainViewModel : ViewModelBase, IDisposable
 
     private static void ApplyViewState(LogViewViewModel view, ViewState state)
     {
-        view.AppNameFilter = state.AppNameFilter ?? string.Empty;
-        view.SessionFilter = state.SessionFilter ?? string.Empty;
-        view.HostnameFilter = state.HostnameFilter ?? string.Empty;
-        view.ProcessIdFilter = state.ProcessIdFilter ?? string.Empty;
-        view.ThreadIdFilter = state.ThreadIdFilter ?? string.Empty;
-        view.TextFilter = state.TextFilter ?? string.Empty;
-
-        if (!string.IsNullOrEmpty(state.MinLogLevel) &&
-            Enum.TryParse<LogEntryType>(state.MinLogLevel, out var logLevel))
+        using (view.DeferRefresh())
         {
-            view.MinLogLevel = logLevel;
-            // Find and set the matching log level option
-            var option = view.LogLevels.FirstOrDefault(l => l.Value == logLevel);
-            if (option != null)
-                view.SelectedLogLevel = option;
+            view.AppNameFilter = state.AppNameFilter ?? string.Empty;
+            view.SessionFilter = state.SessionFilter ?? string.Empty;
+            view.HostnameFilter = state.HostnameFilter ?? string.Empty;
+            view.ProcessIdFilter = state.ProcessIdFilter ?? string.Empty;
+            view.ThreadIdFilter = state.ThreadIdFilter ?? string.Empty;
+            view.TextFilter = state.TextFilter ?? string.Empty;
+
+            if (!string.IsNullOrEmpty(state.MinLogLevel) &&
+                Enum.TryParse<LogEntryType>(state.MinLogLevel, out var logLevel))
+            {
+                view.MinLogLevel = logLevel;
+                var option = view.LogLevels.FirstOrDefault(l => l.Value == logLevel);
+                if (option != null)
+                    view.SelectedLogLevel = option;
+            }
+
+            view.EnableTitleMatching = state.EnableTitleMatching;
+            view.TitlePattern = state.TitlePattern ?? string.Empty;
+            view.TitleCaseSensitive = state.TitleCaseSensitive;
+            view.TitleIsRegex = state.TitleIsRegex;
+            view.TitleInvert = state.TitleInvert;
+
+            view.ShowDebug = state.ShowDebug;
+            view.ShowVerbose = state.ShowVerbose;
+            view.ShowMessage = state.ShowMessage;
+            view.ShowWarning = state.ShowWarning;
+            view.ShowError = state.ShowError;
+            view.ShowFatal = state.ShowFatal;
+            view.ShowMethodFlow = state.ShowMethodFlow;
+            view.ShowSeparator = state.ShowSeparator;
+            view.ShowOther = state.ShowOther;
+
+            view.ShowTimeColumn = state.ShowTimeColumn;
+            view.ShowElapsedColumn = state.ShowElapsedColumn;
+            view.ShowAppColumn = state.ShowAppColumn;
+            view.ShowSessionColumn = state.ShowSessionColumn;
+            view.ShowTitleColumn = state.ShowTitleColumn;
+            view.ShowThreadColumn = state.ShowThreadColumn;
+            view.AutoScroll = state.AutoScroll;
         }
-
-        view.EnableTitleMatching = state.EnableTitleMatching;
-        view.TitlePattern = state.TitlePattern ?? string.Empty;
-        view.TitleCaseSensitive = state.TitleCaseSensitive;
-        view.TitleIsRegex = state.TitleIsRegex;
-        view.TitleInvert = state.TitleInvert;
-
-        view.ShowDebug = state.ShowDebug;
-        view.ShowVerbose = state.ShowVerbose;
-        view.ShowMessage = state.ShowMessage;
-        view.ShowWarning = state.ShowWarning;
-        view.ShowError = state.ShowError;
-        view.ShowFatal = state.ShowFatal;
-        view.ShowMethodFlow = state.ShowMethodFlow;
-        view.ShowSeparator = state.ShowSeparator;
-        view.ShowOther = state.ShowOther;
-
-        view.ShowTimeColumn = state.ShowTimeColumn;
-        view.ShowElapsedColumn = state.ShowElapsedColumn;
-        view.ShowAppColumn = state.ShowAppColumn;
-        view.ShowSessionColumn = state.ShowSessionColumn;
-        view.ShowTitleColumn = state.ShowTitleColumn;
-        view.ShowThreadColumn = state.ShowThreadColumn;
-        view.AutoScroll = state.AutoScroll;
     }
 
     #endregion
@@ -1311,6 +1443,9 @@ public class MainViewModel : ViewModelBase, IDisposable
 
             var reader = new SilFileReader();
             var packets = await reader.ReadFileAsync(dialog.FileName);
+            var newAppNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var newSessions = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var newHostNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
             // Process packets into collections
             var logEntryCount = 0;
@@ -1331,7 +1466,7 @@ public class MainViewModel : ViewModelBase, IDisposable
                         {
                             LogEntries.Add(logEntry);
                         }
-                        TrackAvailableFilterValues(logEntry);
+                        TrackAvailableFilterValues(logEntry, newAppNames, newSessions, newHostNames);
                         logEntryCount++;
                         break;
 
@@ -1354,10 +1489,14 @@ public class MainViewModel : ViewModelBase, IDisposable
                 }
             }
 
+            AddNewFilterValues(AvailableAppNames, newAppNames);
+            AddNewFilterValues(AvailableSessions, newSessions);
+            AddNewFilterValues(AvailableHostnames, newHostNames);
+
             // Refresh views
             foreach (var view in Views)
             {
-                view.RefreshFilter();
+                view.Clear();
             }
             OnPropertyChanged(nameof(EntryCount));
 
@@ -1423,6 +1562,78 @@ public class MainViewModel : ViewModelBase, IDisposable
         _tcpListener?.Dispose();
         _pipeListener?.Dispose();
         _webSocketListener?.Dispose();
+    }
+
+    private void AddNewFilterValues(ObservableCollection<string> targetCollection, HashSet<string> newValues)
+    {
+        if (newValues.Count == 0)
+            return;
+
+        foreach (var value in newValues.OrderBy(v => v, StringComparer.OrdinalIgnoreCase))
+        {
+            targetCollection.Add(value);
+        }
+    }
+
+    private int GetAdaptiveBatchSize()
+    {
+        var logDepth = _pendingLogEntries.Count;
+        if (logDepth >= HighBacklogThreshold)
+            return HighBatchSize;
+
+        if (logDepth >= MediumBacklogThreshold)
+            return MediumBatchSize;
+
+        return BaseBatchSize;
+    }
+
+    private void ScheduleImmediateDrain()
+    {
+        if (_immediateDrainScheduled)
+            return;
+
+        _immediateDrainScheduled = true;
+        Application.Current.Dispatcher.BeginInvoke(DispatcherPriority.Background, new Action(() =>
+        {
+            _immediateDrainScheduled = false;
+            ProcessPendingItems(this, EventArgs.Empty);
+        }));
+    }
+
+    private void UpdateDiagnostics(int lastBatchSize, double lastBatchDurationMs)
+    {
+        DiagnosticsSnapshot = new BatchDiagnosticsSnapshot
+        {
+            LogQueueDepth = _pendingLogEntries.Count,
+            WatchQueueDepth = _pendingWatches.Count,
+            ProcessFlowQueueDepth = _pendingProcessFlows.Count,
+            LastBatchSize = lastBatchSize,
+            LastBatchDurationMs = lastBatchDurationMs,
+            TotalLogEntriesReceived = Interlocked.Read(ref _totalLogEntriesReceived),
+            TotalLogEntriesRendered = Interlocked.Read(ref _totalLogEntriesRendered),
+            TotalWatchUpdatesRendered = Interlocked.Read(ref _totalWatchUpdatesRendered),
+            TotalProcessFlowsRendered = Interlocked.Read(ref _totalProcessFlowsRendered),
+            MaxObservedLogQueueDepth = _maxObservedLogQueueDepth
+        };
+        DiagnosticsText = DiagnosticsSnapshot.ToString();
+    }
+
+    private void UpdateQueueHighWaterMark(int queueDepth)
+    {
+        while (queueDepth > _maxObservedLogQueueDepth)
+        {
+            var original = _maxObservedLogQueueDepth;
+            if (Interlocked.CompareExchange(ref _maxObservedLogQueueDepth, queueDepth, original) == original)
+                break;
+        }
+    }
+
+    private sealed class PendingConnectionUpdate
+    {
+        public string ClientId { get; init; } = string.Empty;
+        public string AppName { get; set; } = string.Empty;
+        public string HostName { get; set; } = string.Empty;
+        public long MessageCount { get; set; }
     }
 
     #endregion

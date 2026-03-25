@@ -17,14 +17,18 @@ public class SmartInspectPipeListener : IPacketListener
 {
     public const string DefaultPipeName = "smartinspect";
     private const string ServerBanner = "SmartInspect Console v1.0\n";
-    private const int MaxInstances = 10;
+    private const int InOutBufferSize = 4096;
 
     private readonly string _pipeName;
     private CancellationTokenSource? _cts;
     private readonly ConcurrentDictionary<string, NamedPipeServerStream> _clients = new();
-    private readonly List<Task> _listenerTasks = new();
+    private readonly ConcurrentDictionary<string, Task> _clientTasks = new();
     private readonly BinaryPacketReader _packetReader = new();
     private int _clientCounter;
+    private Task? _acceptLoopTask;
+    private int _waitingAcceptors;
+    private long _totalConnectionsAccepted;
+    private string? _lastError;
 
     // Global error tracking to prevent spam from multiple instances
     private static string? _lastGlobalErrorMessage;
@@ -42,6 +46,9 @@ public class SmartInspectPipeListener : IPacketListener
     /// Gets the number of connected clients.
     /// </summary>
     public int ClientCount => _clients.Count;
+    public int WaitingAcceptors => _waitingAcceptors;
+    public long TotalConnectionsAccepted => Interlocked.Read(ref _totalConnectionsAccepted);
+    public string? LastError => _lastError;
 
     /// <summary>
     /// Gets the pipe name.
@@ -60,13 +67,7 @@ public class SmartInspectPipeListener : IPacketListener
 
         _cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         IsListening = true;
-        _listenerTasks.Clear();
-
-        // Start multiple pipe instances to handle concurrent connections
-        for (int i = 0; i < MaxInstances; i++)
-        {
-            _listenerTasks.Add(ListenForConnectionAsync(_cts.Token));
-        }
+        _acceptLoopTask = AcceptConnectionsAsync(_cts.Token);
 
         await Task.CompletedTask;
     }
@@ -86,26 +87,44 @@ public class SmartInspectPipeListener : IPacketListener
         }
         _clients.Clear();
 
-        // Wait for all listener tasks to complete (with timeout)
-        if (_listenerTasks.Count > 0)
+        // Wait for the accept loop to complete
+        if (_acceptLoopTask != null)
         {
             try
             {
-                await Task.WhenAll(_listenerTasks).WaitAsync(TimeSpan.FromSeconds(2));
+                await _acceptLoopTask.WaitAsync(TimeSpan.FromSeconds(2));
             }
             catch (TimeoutException)
             {
-                // Tasks didn't complete in time, but we've cancelled them
+                // Accept loop didn't complete in time, but we've cancelled it
             }
             catch (OperationCanceledException)
             {
                 // Expected when cancellation propagates
             }
-            _listenerTasks.Clear();
+            _acceptLoopTask = null;
+        }
+
+        if (_clientTasks.Count > 0)
+        {
+            try
+            {
+                await Task.WhenAll(_clientTasks.Values).WaitAsync(TimeSpan.FromSeconds(2));
+            }
+            catch (TimeoutException)
+            {
+                // Client handlers are cancelled/closing
+            }
+            catch (OperationCanceledException)
+            {
+                // Expected when cancellation propagates
+            }
+
+            _clientTasks.Clear();
         }
     }
 
-    private async Task ListenForConnectionAsync(CancellationToken cancellationToken)
+    private async Task AcceptConnectionsAsync(CancellationToken cancellationToken)
     {
         int retryDelay = 100;
         const int MaxRetryDelay = 30000; // Longer max delay to reduce spam
@@ -117,19 +136,26 @@ public class SmartInspectPipeListener : IPacketListener
             try
             {
                 pipeServer = CreatePipeServer();
-
+                Interlocked.Increment(ref _waitingAcceptors);
                 await pipeServer.WaitForConnectionAsync(cancellationToken);
+                Interlocked.Decrement(ref _waitingAcceptors);
 
                 // Reset retry delay on successful connection
                 retryDelay = 100;
 
                 var clientId = $"pipe-{Interlocked.Increment(ref _clientCounter)}";
+                Interlocked.Increment(ref _totalConnectionsAccepted);
                 _clients[clientId] = pipeServer;
 
                 // Handle client - transfer ownership
                 var clientPipe = pipeServer;
                 pipeServer = null; // Prevent disposal in finally block
-                _ = HandleClientAsync(clientPipe, clientId, cancellationToken);
+                var clientTask = HandleClientAsync(clientPipe, clientId, cancellationToken);
+                _clientTasks[clientId] = clientTask;
+                _ = clientTask.ContinueWith(_ => _clientTasks.TryRemove(clientId, out _),
+                    CancellationToken.None,
+                    TaskContinuationOptions.ExecuteSynchronously,
+                    TaskScheduler.Default);
             }
             catch (OperationCanceledException)
             {
@@ -153,6 +179,9 @@ public class SmartInspectPipeListener : IPacketListener
             }
             finally
             {
+                if (pipeServer != null)
+                    Interlocked.Exchange(ref _waitingAcceptors, Math.Max(0, _waitingAcceptors - 1));
+
                 // Only dispose if we didn't transfer ownership
                 pipeServer?.Dispose();
             }
@@ -173,23 +202,25 @@ public class SmartInspectPipeListener : IPacketListener
             return NamedPipeServerStreamAcl.Create(
                 _pipeName,
                 PipeDirection.InOut,
-                MaxInstances,
+                NamedPipeServerStream.MaxAllowedServerInstances,
                 PipeTransmissionMode.Byte,
                 PipeOptions.Asynchronous,
-                0,
-                0,
+                InOutBufferSize,
+                InOutBufferSize,
                 pipeSecurity);
         }
-        catch (UnauthorizedAccessException)
+        catch (Exception ex) when (ex is UnauthorizedAccessException or IOException or PlatformNotSupportedException or System.Security.SecurityException)
         {
             // Fall back to default security (only current user can connect)
-            // This is expected when not running as admin - don't report as error
+            // This covers machines where ACL creation is restricted or unavailable.
             return new NamedPipeServerStream(
                 _pipeName,
                 PipeDirection.InOut,
-                MaxInstances,
+                NamedPipeServerStream.MaxAllowedServerInstances,
                 PipeTransmissionMode.Byte,
-                PipeOptions.Asynchronous);
+                PipeOptions.Asynchronous,
+                InOutBufferSize,
+                InOutBufferSize);
         }
     }
 
@@ -204,6 +235,7 @@ public class SmartInspectPipeListener : IPacketListener
         {
             var now = DateTime.UtcNow;
             var timeSinceLastError = now - _lastGlobalErrorTime;
+            _lastError = $"{now:O} {ex.GetType().Name}: {ex.Message}";
 
             // Only report if different message or at least 30 seconds have passed
             if (ex.Message != _lastGlobalErrorMessage || timeSinceLastError.TotalSeconds >= 30)
@@ -276,12 +308,6 @@ public class SmartInspectPipeListener : IPacketListener
             try { pipeServer.Close(); } catch { }
             pipeServer.Dispose();
             OnClientDisconnected(new ClientEventArgs(clientId, clientInfo));
-
-            // Start a new listener to replace this one
-            if (IsListening && !cancellationToken.IsCancellationRequested)
-            {
-                _ = ListenForConnectionAsync(cancellationToken);
-            }
         }
     }
 

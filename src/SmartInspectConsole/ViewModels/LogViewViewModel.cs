@@ -1,5 +1,6 @@
 using System.Collections;
 using System.Collections.ObjectModel;
+using System.Collections.Specialized;
 using System.ComponentModel;
 using System.Text;
 using System.Text.RegularExpressions;
@@ -19,6 +20,7 @@ public class LogViewViewModel : ViewModelBase
     private readonly ObservableCollection<LogEntry> _allLogEntries;
     private readonly object _lockObject;
     private readonly CollectionViewSource _viewSource;
+    private readonly string[] _emptyFilterValues = [];
 
     private string _name = "View";
     private string _appNameFilter = string.Empty;
@@ -65,6 +67,15 @@ public class LogViewViewModel : ViewModelBase
 
     // Cached filtered count to avoid re-enumeration
     private int _filteredCount;
+    private int _refreshSuspensionCount;
+    private bool _refreshPending;
+    private Regex? _titleRegex;
+    private bool _titleRegexValid = true;
+    private string[] _appNameFilterValues = [];
+    private string[] _sessionFilterValues = [];
+    private string[] _hostnameFilterValues = [];
+    private string[] _processIdFilterValues = [];
+    private string[] _threadIdFilterValues = [];
 
     public LogViewViewModel(ObservableCollection<LogEntry> allLogEntries, object lockObject, string name = "View", bool isPrimaryView = false)
     {
@@ -79,6 +90,10 @@ public class LogViewViewModel : ViewModelBase
         _viewSource = new CollectionViewSource { Source = _allLogEntries };
         FilteredLogEntries = _viewSource.View;
         FilteredLogEntries.Filter = FilterLogEntry;
+        if (FilteredLogEntries is INotifyCollectionChanged notifyCollectionChanged)
+        {
+            notifyCollectionChanged.CollectionChanged += OnFilteredLogEntriesCollectionChanged;
+        }
 
         // Available log levels for filtering
         LogLevels = new ObservableCollection<LogLevelOption>
@@ -93,6 +108,7 @@ public class LogViewViewModel : ViewModelBase
         };
 
         SelectedLogLevel = LogLevels[0];
+        RecountFilteredEntries();
     }
 
     #region Properties
@@ -133,6 +149,7 @@ public class LogViewViewModel : ViewModelBase
         {
             if (SetProperty(ref _appNameFilter, value))
             {
+                _appNameFilterValues = SplitFilterValues(value);
                 RefreshFilter();
             }
         }
@@ -145,6 +162,7 @@ public class LogViewViewModel : ViewModelBase
         {
             if (SetProperty(ref _sessionFilter, value))
             {
+                _sessionFilterValues = SplitFilterValues(value);
                 RefreshFilter();
             }
         }
@@ -157,6 +175,7 @@ public class LogViewViewModel : ViewModelBase
         {
             if (SetProperty(ref _hostnameFilter, value))
             {
+                _hostnameFilterValues = SplitFilterValues(value);
                 RefreshFilter();
             }
         }
@@ -169,6 +188,7 @@ public class LogViewViewModel : ViewModelBase
         {
             if (SetProperty(ref _processIdFilter, value))
             {
+                _processIdFilterValues = SplitFilterValues(value);
                 RefreshFilter();
             }
         }
@@ -181,6 +201,7 @@ public class LogViewViewModel : ViewModelBase
         {
             if (SetProperty(ref _threadIdFilter, value))
             {
+                _threadIdFilterValues = SplitFilterValues(value);
                 RefreshFilter();
             }
         }
@@ -246,6 +267,7 @@ public class LogViewViewModel : ViewModelBase
         {
             if (SetProperty(ref _titlePattern, value))
             {
+                InvalidateTitleRegex();
                 RefreshFilter();
             }
         }
@@ -258,6 +280,7 @@ public class LogViewViewModel : ViewModelBase
         {
             if (SetProperty(ref _titleCaseSensitive, value))
             {
+                InvalidateTitleRegex();
                 RefreshFilter();
             }
         }
@@ -270,6 +293,7 @@ public class LogViewViewModel : ViewModelBase
         {
             if (SetProperty(ref _titleIsRegex, value))
             {
+                InvalidateTitleRegex();
                 RefreshFilter();
             }
         }
@@ -479,9 +503,20 @@ public class LogViewViewModel : ViewModelBase
 
     public void RefreshFilter()
     {
+        if (_refreshSuspensionCount > 0)
+        {
+            _refreshPending = true;
+            return;
+        }
+
         FilteredLogEntries.Refresh();
-        _filteredCount = FilteredLogEntries.Cast<object>().Count();
-        OnPropertyChanged(nameof(FilteredCount));
+        RecountFilteredEntries();
+    }
+
+    public IDisposable DeferRefresh()
+    {
+        _refreshSuspensionCount++;
+        return new DeferredRefreshScope(this);
     }
 
     private bool FilterLogEntry(object obj)
@@ -494,23 +529,23 @@ public class LogViewViewModel : ViewModelBase
             return false;
 
         // App name filter (multi-value comma-separated)
-        if (!PassesMultiValueFilter(AppNameFilter, entry.AppName))
+        if (!PassesMultiValueFilter(_appNameFilterValues, entry.AppName))
             return false;
 
         // Session filter (multi-value comma-separated)
-        if (!PassesMultiValueFilter(SessionFilter, entry.SessionName))
+        if (!PassesMultiValueFilter(_sessionFilterValues, entry.SessionName))
             return false;
 
         // Hostname filter (multi-value comma-separated)
-        if (!PassesMultiValueFilter(HostnameFilter, entry.HostName))
+        if (!PassesMultiValueFilter(_hostnameFilterValues, entry.HostName))
             return false;
 
         // Process ID filter (multi-value comma-separated)
-        if (!PassesMultiValueFilter(ProcessIdFilter, entry.ProcessId.ToString()))
+        if (!PassesMultiValueFilter(_processIdFilterValues, entry.ProcessId.ToString()))
             return false;
 
         // Thread ID filter (multi-value comma-separated)
-        if (!PassesMultiValueFilter(ThreadIdFilter, entry.ThreadId.ToString()))
+        if (!PassesMultiValueFilter(_threadIdFilterValues, entry.ThreadId.ToString()))
             return false;
 
         // Title matching filter
@@ -558,13 +593,8 @@ public class LogViewViewModel : ViewModelBase
         };
     }
 
-    private static bool PassesMultiValueFilter(string filter, string value)
+    private bool PassesMultiValueFilter(string[] filterValues, string value)
     {
-        if (string.IsNullOrWhiteSpace(filter))
-            return true;
-
-        // Split by comma and check if any value matches
-        var filterValues = filter.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
         if (filterValues.Length == 0)
             return true;
 
@@ -586,8 +616,8 @@ public class LogViewViewModel : ViewModelBase
         {
             if (TitleIsRegex)
             {
-                var options = TitleCaseSensitive ? RegexOptions.None : RegexOptions.IgnoreCase;
-                return Regex.IsMatch(title, TitlePattern, options);
+                EnsureTitleRegex();
+                return _titleRegexValid && _titleRegex != null && _titleRegex.IsMatch(title);
             }
             else
             {
@@ -599,7 +629,7 @@ public class LogViewViewModel : ViewModelBase
         }
         catch (ArgumentException)
         {
-            // Invalid regex pattern - treat as no match
+            _titleRegexValid = false;
             return false;
         }
     }
@@ -626,7 +656,7 @@ public class LogViewViewModel : ViewModelBase
 
     public void Clear()
     {
-        OnPropertyChanged(nameof(FilteredCount));
+        RecountFilteredEntries();
     }
 
     /// <summary>
@@ -644,8 +674,6 @@ public class LogViewViewModel : ViewModelBase
                 _allLogEntries.Remove(entry);
             }
         }
-
-        OnPropertyChanged(nameof(FilteredCount));
     }
 
     /// <summary>
@@ -708,6 +736,114 @@ public class LogViewViewModel : ViewModelBase
     }
 
     #endregion
+
+    private static string[] SplitFilterValues(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return [];
+
+        return value.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+    }
+
+    private void EnsureTitleRegex()
+    {
+        if (!TitleIsRegex)
+            return;
+
+        if (_titleRegex != null || !_titleRegexValid)
+            return;
+
+        var options = RegexOptions.Compiled | RegexOptions.CultureInvariant;
+        if (!TitleCaseSensitive)
+            options |= RegexOptions.IgnoreCase;
+
+        _titleRegex = new Regex(TitlePattern, options);
+        _titleRegexValid = true;
+    }
+
+    private void InvalidateTitleRegex()
+    {
+        _titleRegex = null;
+        _titleRegexValid = true;
+    }
+
+    private void RecountFilteredEntries()
+    {
+        var count = FilteredLogEntries.Cast<object>().Count();
+        if (_filteredCount == count)
+            return;
+
+        _filteredCount = count;
+        OnPropertyChanged(nameof(FilteredCount));
+    }
+
+    private void OnFilteredLogEntriesCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
+    {
+        switch (e.Action)
+        {
+            case NotifyCollectionChangedAction.Add:
+                AdjustFilteredCount(e.NewItems?.Count ?? 0);
+                break;
+
+            case NotifyCollectionChangedAction.Remove:
+                AdjustFilteredCount(-(e.OldItems?.Count ?? 0));
+                break;
+
+            case NotifyCollectionChangedAction.Replace:
+                AdjustFilteredCount((e.NewItems?.Count ?? 0) - (e.OldItems?.Count ?? 0));
+                break;
+
+            default:
+                RecountFilteredEntries();
+                break;
+        }
+    }
+
+    private void AdjustFilteredCount(int delta)
+    {
+        if (delta == 0)
+            return;
+
+        var count = Math.Max(0, _filteredCount + delta);
+        if (count == _filteredCount)
+            return;
+
+        _filteredCount = count;
+        OnPropertyChanged(nameof(FilteredCount));
+    }
+
+    private void ResumeRefresh()
+    {
+        if (_refreshSuspensionCount == 0)
+            return;
+
+        _refreshSuspensionCount--;
+        if (_refreshSuspensionCount == 0 && _refreshPending)
+        {
+            _refreshPending = false;
+            RefreshFilter();
+        }
+    }
+
+    private sealed class DeferredRefreshScope : IDisposable
+    {
+        private readonly LogViewViewModel _owner;
+        private bool _disposed;
+
+        public DeferredRefreshScope(LogViewViewModel owner)
+        {
+            _owner = owner;
+        }
+
+        public void Dispose()
+        {
+            if (_disposed)
+                return;
+
+            _disposed = true;
+            _owner.ResumeRefresh();
+        }
+    }
 }
 
 /// <summary>

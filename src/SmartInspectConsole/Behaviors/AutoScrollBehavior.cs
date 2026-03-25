@@ -9,6 +9,13 @@ namespace SmartInspectConsole.Behaviors;
 /// </summary>
 public static class AutoScrollBehavior
 {
+    private static readonly DependencyProperty SubscriptionStateProperty =
+        DependencyProperty.RegisterAttached(
+            "SubscriptionState",
+            typeof(AutoScrollSubscriptionState),
+            typeof(AutoScrollBehavior),
+            new PropertyMetadata(null));
+
     public static readonly DependencyProperty AutoScrollProperty =
         DependencyProperty.RegisterAttached(
             "AutoScroll",
@@ -31,46 +38,19 @@ public static class AutoScrollBehavior
         if (d is not ListView listView)
             return;
 
-        var newValue = (bool)e.NewValue;
-
-        // Remove any existing handler first
-        if (listView.ItemsSource is INotifyCollectionChanged oldCollection)
-        {
-            oldCollection.CollectionChanged -= (s, args) => OnCollectionChanged(listView, args);
-        }
-
-        // Unsubscribe from SourceUpdated
+        var state = GetOrCreateState(listView);
+        DetachFromCollection(state);
         listView.SourceUpdated -= OnSourceUpdated;
+        state.ItemsSourceDescriptor?.RemoveValueChanged(listView, OnItemsSourceChanged);
 
-        if (newValue)
+        if ((bool)e.NewValue)
         {
-            // Subscribe to collection changes
-            if (listView.ItemsSource is INotifyCollectionChanged collection)
-            {
-                // Use a closure to capture the listView reference
-                NotifyCollectionChangedEventHandler handler = null!;
-                handler = (s, args) =>
-                {
-                    if (GetAutoScroll(listView))
-                    {
-                        OnCollectionChanged(listView, args);
-                    }
-                };
-
-                // Store the handler in the listView's Tag for later removal
-                listView.Tag = handler;
-                collection.CollectionChanged += handler;
-            }
-
-            // Also listen for ItemsSource changes
             listView.SourceUpdated += OnSourceUpdated;
-
-            // Subscribe to ItemsSource property changes
-            var dpd = System.ComponentModel.DependencyPropertyDescriptor.FromProperty(
+            state.ItemsSourceDescriptor = System.ComponentModel.DependencyPropertyDescriptor.FromProperty(
                 ItemsControl.ItemsSourceProperty, typeof(ListView));
-            dpd?.AddValueChanged(listView, OnItemsSourceChanged);
+            state.ItemsSourceDescriptor?.AddValueChanged(listView, OnItemsSourceChanged);
 
-            // Scroll to end immediately if there are items
+            AttachToCollection(state, listView.ItemsSource as INotifyCollectionChanged);
             ScrollToEnd(listView);
         }
     }
@@ -88,34 +68,26 @@ public static class AutoScrollBehavior
         if (sender is not ListView listView)
             return;
 
-        // Re-attach to the new collection
-        if (listView.Tag is NotifyCollectionChangedEventHandler oldHandler &&
-            listView.ItemsSource is INotifyCollectionChanged oldCollection)
-        {
-            // This won't work perfectly but we'll re-subscribe anyway
-        }
-
-        if (GetAutoScroll(listView) && listView.ItemsSource is INotifyCollectionChanged newCollection)
-        {
-            NotifyCollectionChangedEventHandler handler = (s, args) =>
-            {
-                if (GetAutoScroll(listView))
-                {
-                    OnCollectionChanged(listView, args);
-                }
-            };
-            listView.Tag = handler;
-            newCollection.CollectionChanged += handler;
-        }
+        var state = GetOrCreateState(listView);
+        DetachFromCollection(state);
+        AttachToCollection(state, listView.ItemsSource as INotifyCollectionChanged);
     }
 
     private static void OnCollectionChanged(ListView listView, NotifyCollectionChangedEventArgs args)
     {
-        if (args.Action == NotifyCollectionChangedAction.Add)
+        if (args.Action == NotifyCollectionChangedAction.Add && GetAutoScroll(listView))
         {
-            // Use dispatcher to ensure UI is updated before scrolling
+            var state = GetOrCreateState(listView);
+            if (state.ScrollScheduled)
+                return;
+
+            state.ScrollScheduled = true;
             listView.Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Background,
-                new Action(() => ScrollToEnd(listView)));
+                new Action(() =>
+                {
+                    state.ScrollScheduled = false;
+                    ScrollToEnd(listView);
+                }));
         }
     }
 
@@ -126,5 +98,46 @@ public static class AutoScrollBehavior
             var lastItem = listView.Items[listView.Items.Count - 1];
             listView.ScrollIntoView(lastItem);
         }
+    }
+
+    private static AutoScrollSubscriptionState GetOrCreateState(ListView listView)
+    {
+        if (listView.GetValue(SubscriptionStateProperty) is AutoScrollSubscriptionState existing)
+            return existing;
+
+        var created = new AutoScrollSubscriptionState(listView);
+        listView.SetValue(SubscriptionStateProperty, created);
+        return created;
+    }
+
+    private static void AttachToCollection(AutoScrollSubscriptionState state, INotifyCollectionChanged? collection)
+    {
+        state.Collection = collection;
+        if (collection != null)
+        {
+            collection.CollectionChanged += state.Handler;
+        }
+    }
+
+    private static void DetachFromCollection(AutoScrollSubscriptionState state)
+    {
+        if (state.Collection != null)
+        {
+            state.Collection.CollectionChanged -= state.Handler;
+            state.Collection = null;
+        }
+    }
+
+    private sealed class AutoScrollSubscriptionState
+    {
+        public AutoScrollSubscriptionState(ListView listView)
+        {
+            Handler = (_, args) => OnCollectionChanged(listView, args);
+        }
+
+        public INotifyCollectionChanged? Collection { get; set; }
+        public NotifyCollectionChangedEventHandler Handler { get; }
+        public System.ComponentModel.DependencyPropertyDescriptor? ItemsSourceDescriptor { get; set; }
+        public bool ScrollScheduled { get; set; }
     }
 }

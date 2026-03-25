@@ -115,6 +115,6 @@ public partial class SettingsDialog : Window
 
     private void DefaultMaxLogEntries_Click(object sender, RoutedEventArgs e)
     {
-        MaxLogEntriesTextBox.Text = "100,000";
+        MaxLogEntriesTextBox.Text = "20,000";
     }
 }

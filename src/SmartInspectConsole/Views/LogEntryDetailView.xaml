@@ -13,77 +13,8 @@
     </UserControl.Resources>
 
     <Grid>
-        <Grid.RowDefinitions>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="*"/>
-        </Grid.RowDefinitions>
-
-        <!-- Header Info Section -->
-        <Border Grid.Row="0" Background="{DynamicResource SurfaceBrush}"
-                BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,0,0,1"
-                Padding="12,8">
-            <Grid>
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*"/>
-                    <ColumnDefinition Width="*"/>
-                </Grid.ColumnDefinitions>
-                <Grid.RowDefinitions>
-                    <RowDefinition Height="Auto"/>
-                    <RowDefinition Height="Auto"/>
-                    <RowDefinition Height="Auto"/>
-                    <RowDefinition Height="Auto"/>
-                </Grid.RowDefinitions>
-
-                <!-- Title (spans both columns) -->
-                <StackPanel Grid.Row="0" Grid.ColumnSpan="2" Margin="0,0,0,8">
-                    <TextBlock Text="Title" FontSize="10" Foreground="{DynamicResource ForegroundSecondaryBrush}"/>
-                    <TextBlock Text="{Binding Title}" FontSize="14" FontWeight="SemiBold" TextWrapping="Wrap"/>
-                </StackPanel>
-
-                <!-- Left Column -->
-                <StackPanel Grid.Row="1" Grid.Column="0" Margin="0,0,16,4">
-                    <TextBlock Text="Application" FontSize="10" Foreground="{DynamicResource ForegroundSecondaryBrush}"/>
-                    <TextBlock Text="{Binding AppName}" FontSize="12"/>
-                </StackPanel>
-
-                <StackPanel Grid.Row="2" Grid.Column="0" Margin="0,0,16,4">
-                    <TextBlock Text="Session" FontSize="10" Foreground="{DynamicResource ForegroundSecondaryBrush}"/>
-                    <TextBlock Text="{Binding SessionName}" FontSize="12"/>
-                </StackPanel>
-
-                <StackPanel Grid.Row="3" Grid.Column="0" Margin="0,0,16,4">
-                    <TextBlock Text="Host" FontSize="10" Foreground="{DynamicResource ForegroundSecondaryBrush}"/>
-                    <TextBlock Text="{Binding HostName}" FontSize="12"/>
-                </StackPanel>
-
-                <!-- Right Column -->
-                <StackPanel Grid.Row="1" Grid.Column="1" Margin="0,0,0,4">
-                    <TextBlock Text="Timestamp" FontSize="10" Foreground="{DynamicResource ForegroundSecondaryBrush}"/>
-                    <TextBlock Text="{Binding Timestamp, StringFormat=yyyy-MM-dd HH:mm:ss.fff}" FontSize="12"/>
-                </StackPanel>
-
-                <StackPanel Grid.Row="2" Grid.Column="1" Margin="0,0,0,4">
-                    <TextBlock Text="Type / Viewer" FontSize="10" Foreground="{DynamicResource ForegroundSecondaryBrush}"/>
-                    <TextBlock FontSize="12">
-                        <Run Text="{Binding LogEntryType, Mode=OneWay}"/>
-                        <Run Text=" / "/>
-                        <Run Text="{Binding ViewerId, Mode=OneWay}"/>
-                    </TextBlock>
-                </StackPanel>
-
-                <StackPanel Grid.Row="3" Grid.Column="1" Margin="0,0,0,4">
-                    <TextBlock Text="Process / Thread" FontSize="10" Foreground="{DynamicResource ForegroundSecondaryBrush}"/>
-                    <TextBlock FontSize="12">
-                        <Run Text="{Binding ProcessId, Mode=OneWay}"/>
-                        <Run Text=" / "/>
-                        <Run Text="{Binding ThreadId, Mode=OneWay}"/>
-                    </TextBlock>
-                </StackPanel>
-            </Grid>
-        </Border>
-
         <!-- Data Section -->
-        <Grid Grid.Row="1">
+        <Grid>
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto"/>
                 <RowDefinition Height="*"/>

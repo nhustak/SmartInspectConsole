@@ -9,7 +9,7 @@
         xmlns:views="clr-namespace:SmartInspectConsole.Views"
         xmlns:behaviors="clr-namespace:SmartInspectConsole.Behaviors"
         mc:Ignorable="d"
-        Title="SmartInspect Console"
+        Title="{Binding Version, StringFormat=SmartInspect Console {0}}"
         Icon="Resources/smartinspectconsole.png"
         Height="800" Width="1200"
         WindowStartupLocation="CenterScreen"
@@ -857,6 +857,10 @@
             <Separator Background="{DynamicResource BorderBrush}"/>
             <StatusBarItem>
                 <TextBlock Text="{Binding EntryCount, StringFormat=Total: {0}}"/>
+            </StatusBarItem>
+            <Separator Background="{DynamicResource BorderBrush}"/>
+            <StatusBarItem>
+                <TextBlock Text="{Binding DiagnosticsText}" Foreground="{DynamicResource ForegroundSecondaryBrush}"/>
             </StatusBarItem>
             <Separator Background="{DynamicResource BorderBrush}"/>
             <StatusBarItem HorizontalAlignment="Right">

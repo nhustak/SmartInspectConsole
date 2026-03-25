@@ -51,7 +51,7 @@ public class AppState
     // Connection Manager
     public bool ShowConnectionsPanel { get; set; } = true;
     public List<string> MutedApplications { get; set; } = new();
-    public int MaxLogEntries { get; set; } = 100_000;
+    public int MaxLogEntries { get; set; } = 20_000;
 
     // Views configuration
     public List<ViewState> Views { get; set; } = new();
