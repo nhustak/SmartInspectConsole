@@ -84,6 +84,16 @@
                 </Setter.Value>
             </Setter>
         </Style>
+
+        <Style x:Key="SelectedFilterChipBorder" TargetType="Border">
+            <Setter Property="Background" Value="#1976D2"/>
+            <Setter Property="BorderBrush" Value="#1565C0"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="CornerRadius" Value="4"/>
+            <Setter Property="Margin" Value="2,0,2,4"/>
+            <Setter Property="Padding" Value="10,4"/>
+        </Style>
+
     </Window.Resources>
 
     <DockPanel Margin="16">
@@ -108,6 +118,21 @@
                         <!-- Application Filter -->
                         <StackPanel Margin="0,0,0,8">
                             <Label Content="Application:" Padding="0,0,0,4"/>
+                            <ItemsControl ItemsSource="{Binding SelectedAppFilters}"
+                                          Visibility="{Binding SelectedAppFilters.Count, Converter={StaticResource CountToVisibility}, FallbackValue=Collapsed}">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate>
+                                        <WrapPanel/>
+                                    </ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Border Style="{StaticResource SelectedFilterChipBorder}">
+                                            <TextBlock Text="{Binding}" Foreground="White"/>
+                                        </Border>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
                             <ItemsControl ItemsSource="{Binding AvailableAppNames}"
                                           Visibility="{Binding AvailableAppNames.Count, Converter={StaticResource CountToVisibility}, FallbackValue=Collapsed}">
                                 <ItemsControl.ItemsPanel>
@@ -132,6 +157,21 @@
                         <!-- Session Filter -->
                         <StackPanel Margin="0,0,0,8">
                             <Label Content="Session:" Padding="0,0,0,4"/>
+                            <ItemsControl ItemsSource="{Binding SelectedSessionFilters}"
+                                          Visibility="{Binding SelectedSessionFilters.Count, Converter={StaticResource CountToVisibility}, FallbackValue=Collapsed}">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate>
+                                        <WrapPanel/>
+                                    </ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Border Style="{StaticResource SelectedFilterChipBorder}">
+                                            <TextBlock Text="{Binding}" Foreground="White"/>
+                                        </Border>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
                             <ItemsControl ItemsSource="{Binding AvailableSessions}"
                                           Visibility="{Binding AvailableSessions.Count, Converter={StaticResource CountToVisibility}, FallbackValue=Collapsed}">
                                 <ItemsControl.ItemsPanel>
@@ -156,6 +196,21 @@
                         <!-- Hostname Filter -->
                         <StackPanel Margin="0,0,0,8">
                             <Label Content="Hostname:" Padding="0,0,0,4"/>
+                            <ItemsControl ItemsSource="{Binding SelectedHostnameFilters}"
+                                          Visibility="{Binding SelectedHostnameFilters.Count, Converter={StaticResource CountToVisibility}, FallbackValue=Collapsed}">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate>
+                                        <WrapPanel/>
+                                    </ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Border Style="{StaticResource SelectedFilterChipBorder}">
+                                            <TextBlock Text="{Binding}" Foreground="White"/>
+                                        </Border>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
                             <ItemsControl ItemsSource="{Binding AvailableHostnames}"
                                           Visibility="{Binding AvailableHostnames.Count, Converter={StaticResource CountToVisibility}, FallbackValue=Collapsed}">
                                 <ItemsControl.ItemsPanel>

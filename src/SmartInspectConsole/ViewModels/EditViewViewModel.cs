@@ -34,6 +34,9 @@ public class EditViewViewModel : ViewModelBase
     public ObservableCollection<FilterOption> AvailableAppNames { get; } = new();
     public ObservableCollection<FilterOption> AvailableSessions { get; } = new();
     public ObservableCollection<FilterOption> AvailableHostnames { get; } = new();
+    public ObservableCollection<string> SelectedAppFilters { get; } = new();
+    public ObservableCollection<string> SelectedSessionFilters { get; } = new();
+    public ObservableCollection<string> SelectedHostnameFilters { get; } = new();
 
     private bool _enableTitleMatching;
     private string _titlePattern = string.Empty;
@@ -74,19 +77,40 @@ public class EditViewViewModel : ViewModelBase
     public string AppFilter
     {
         get => _appFilter;
-        set => SetProperty(ref _appFilter, value);
+        set
+        {
+            if (SetProperty(ref _appFilter, value))
+            {
+                UpdateSelectionFromFilter(AvailableAppNames, value);
+                UpdateSelectedFilterItems(SelectedAppFilters, value);
+            }
+        }
     }
 
     public string SessionFilter
     {
         get => _sessionFilter;
-        set => SetProperty(ref _sessionFilter, value);
+        set
+        {
+            if (SetProperty(ref _sessionFilter, value))
+            {
+                UpdateSelectionFromFilter(AvailableSessions, value);
+                UpdateSelectedFilterItems(SelectedSessionFilters, value);
+            }
+        }
     }
 
     public string HostnameFilter
     {
         get => _hostnameFilter;
-        set => SetProperty(ref _hostnameFilter, value);
+        set
+        {
+            if (SetProperty(ref _hostnameFilter, value))
+            {
+                UpdateSelectionFromFilter(AvailableHostnames, value);
+                UpdateSelectedFilterItems(SelectedHostnameFilters, value);
+            }
+        }
     }
 
     public string ProcessIdFilter
@@ -299,14 +323,28 @@ public class EditViewViewModel : ViewModelBase
     /// </summary>
     private void UpdateSelectionFromFilter(ObservableCollection<FilterOption> options, string filter)
     {
-        var filterValues = string.IsNullOrWhiteSpace(filter)
-            ? Array.Empty<string>()
-            : filter.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        var filterValues = SplitFilterValues(filter);
 
         foreach (var option in options)
         {
             option.IsSelected = filterValues.Any(f =>
                 f.Equals(option.Value, StringComparison.OrdinalIgnoreCase));
+        }
+    }
+
+    private static string[] SplitFilterValues(string filter)
+    {
+        return string.IsNullOrWhiteSpace(filter)
+            ? Array.Empty<string>()
+            : filter.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+    }
+
+    private static void UpdateSelectedFilterItems(ObservableCollection<string> target, string filter)
+    {
+        target.Clear();
+        foreach (var value in SplitFilterValues(filter))
+        {
+            target.Add(value);
         }
     }
 
