@@ -1,4 +1,4 @@
-# SmartInspect Console v1.0.0.48
+# SmartInspect Console v1.0.0.58
 
 Last updated: 2026-03-25
 
@@ -91,10 +91,18 @@ I will rename and place the actual images in the README once the files are there
 - Dark and light themes
 - Layout persistence
 - Window placement persistence
+- Edit View dialog remembers its size and position
+- Edit View dialog opens at a larger default size
 - Layout export/import
 - Version displayed in the main window title
 - Settings dialog for listener ports, pipe name, debug mode, retention cap, and confirm-before-clear
 - Help menu entry to launch the built-in load tester
+
+### View Filter Editing
+
+- Quick-pick filter tags add or remove values directly in the filter text boxes
+- Filter text remains the source of truth for selected values
+- Pressing `Enter` in the Edit View dialog no longer saves and closes the dialog
 
 ## Load Handling Notes
 

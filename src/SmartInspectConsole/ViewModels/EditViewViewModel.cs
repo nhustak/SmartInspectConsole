@@ -362,7 +362,6 @@ public class EditViewViewModel : ViewModelBase
     /// </summary>
     public void ToggleAppSelection(FilterOption option)
     {
-        option.IsSelected = !option.IsSelected;
         AppFilter = BuildFilterFromSelection(AvailableAppNames);
     }
 
@@ -371,7 +370,6 @@ public class EditViewViewModel : ViewModelBase
     /// </summary>
     public void ToggleSessionSelection(FilterOption option)
     {
-        option.IsSelected = !option.IsSelected;
         SessionFilter = BuildFilterFromSelection(AvailableSessions);
     }
 
@@ -380,7 +378,6 @@ public class EditViewViewModel : ViewModelBase
     /// </summary>
     public void ToggleHostnameSelection(FilterOption option)
     {
-        option.IsSelected = !option.IsSelected;
         HostnameFilter = BuildFilterFromSelection(AvailableHostnames);
     }
 

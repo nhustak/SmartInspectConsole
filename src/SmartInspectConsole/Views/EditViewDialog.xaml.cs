@@ -77,7 +77,7 @@ public partial class EditViewDialog : Window
 
     private void RemoveAppTag_Click(object sender, RoutedEventArgs e)
     {
-        if (sender is ToggleButton button && button.DataContext is string value)
+        if (sender is ButtonBase button && button.DataContext is string value)
         {
             ViewModel.RemoveAppSelection(value);
         }
@@ -85,7 +85,7 @@ public partial class EditViewDialog : Window
 
     private void RemoveSessionTag_Click(object sender, RoutedEventArgs e)
     {
-        if (sender is ToggleButton button && button.DataContext is string value)
+        if (sender is ButtonBase button && button.DataContext is string value)
         {
             ViewModel.RemoveSessionSelection(value);
         }
@@ -101,7 +101,7 @@ public partial class EditViewDialog : Window
 
     private void RemoveHostnameTag_Click(object sender, RoutedEventArgs e)
     {
-        if (sender is ToggleButton button && button.DataContext is string value)
+        if (sender is ButtonBase button && button.DataContext is string value)
         {
             ViewModel.RemoveHostnameSelection(value);
         }

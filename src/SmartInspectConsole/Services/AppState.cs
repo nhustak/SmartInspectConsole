@@ -29,6 +29,12 @@ public class AppState
     public double WindowHeight { get; set; }
     public bool IsMaximized { get; set; }
 
+    // Edit View dialog settings
+    public double EditViewDialogLeft { get; set; }
+    public double EditViewDialogTop { get; set; }
+    public double EditViewDialogWidth { get; set; }
+    public double EditViewDialogHeight { get; set; }
+
     // Theme
     public bool IsDarkTheme { get; set; } = true;
 
@@ -126,36 +132,7 @@ public class AppState
     /// </summary>
     public void ApplyWindowSettings(Window window)
     {
-        if (WindowWidth > 0 && WindowHeight > 0)
-        {
-            // Validate position is on screen
-            var left = WindowLeft;
-            var top = WindowTop;
-
-            var screenLeft = SystemParameters.VirtualScreenLeft;
-            var screenTop = SystemParameters.VirtualScreenTop;
-            var screenWidth = SystemParameters.VirtualScreenWidth;
-            var screenHeight = SystemParameters.VirtualScreenHeight;
-
-            // Ensure window is at least partially visible
-            if (left < screenLeft - WindowWidth + 100)
-                left = screenLeft;
-            if (top < screenTop - WindowHeight + 100)
-                top = screenTop;
-            if (left > screenLeft + screenWidth - 100)
-                left = screenLeft + screenWidth - WindowWidth;
-            if (top > screenTop + screenHeight - 100)
-                top = screenTop + screenHeight - WindowHeight;
-
-            window.Left = left;
-            window.Top = top;
-            window.Width = WindowWidth;
-            window.Height = WindowHeight;
-            window.WindowStartupLocation = WindowStartupLocation.Manual;
-
-            if (IsMaximized)
-                window.WindowState = WindowState.Maximized;
-        }
+        ApplyWindowSettings(window, WindowLeft, WindowTop, WindowWidth, WindowHeight, IsMaximized);
     }
 
     /// <summary>
@@ -163,22 +140,77 @@ public class AppState
     /// </summary>
     public void CaptureWindowSettings(Window window)
     {
-        IsMaximized = window.WindowState == WindowState.Maximized;
+        CaptureWindowSettings(window, out var left, out var top, out var width, out var height, out var isMaximized);
+        WindowLeft = left;
+        WindowTop = top;
+        WindowWidth = width;
+        WindowHeight = height;
+        IsMaximized = isMaximized;
+    }
+
+    public void ApplyEditViewDialogSettings(Window window)
+    {
+        ApplyWindowSettings(window, EditViewDialogLeft, EditViewDialogTop, EditViewDialogWidth, EditViewDialogHeight, isMaximized: false);
+    }
+
+    public void CaptureEditViewDialogSettings(Window window)
+    {
+        CaptureWindowSettings(window, out var left, out var top, out var width, out var height, out _);
+        EditViewDialogLeft = left;
+        EditViewDialogTop = top;
+        EditViewDialogWidth = width;
+        EditViewDialogHeight = height;
+    }
+
+    private static void ApplyWindowSettings(Window window, double savedLeft, double savedTop, double savedWidth, double savedHeight, bool isMaximized)
+    {
+        if (savedWidth <= 0 || savedHeight <= 0)
+            return;
+
+        var left = savedLeft;
+        var top = savedTop;
+
+        var screenLeft = SystemParameters.VirtualScreenLeft;
+        var screenTop = SystemParameters.VirtualScreenTop;
+        var screenWidth = SystemParameters.VirtualScreenWidth;
+        var screenHeight = SystemParameters.VirtualScreenHeight;
+
+        if (left < screenLeft - savedWidth + 100)
+            left = screenLeft;
+        if (top < screenTop - savedHeight + 100)
+            top = screenTop;
+        if (left > screenLeft + screenWidth - 100)
+            left = screenLeft + screenWidth - savedWidth;
+        if (top > screenTop + screenHeight - 100)
+            top = screenTop + screenHeight - savedHeight;
+
+        window.Left = left;
+        window.Top = top;
+        window.Width = savedWidth;
+        window.Height = savedHeight;
+        window.WindowStartupLocation = WindowStartupLocation.Manual;
+
+        if (isMaximized)
+            window.WindowState = WindowState.Maximized;
+    }
+
+    private static void CaptureWindowSettings(Window window, out double left, out double top, out double width, out double height, out bool isMaximized)
+    {
+        isMaximized = window.WindowState == WindowState.Maximized;
 
         if (window.WindowState == WindowState.Maximized)
         {
-            WindowLeft = window.RestoreBounds.Left;
-            WindowTop = window.RestoreBounds.Top;
-            WindowWidth = window.RestoreBounds.Width;
-            WindowHeight = window.RestoreBounds.Height;
+            left = window.RestoreBounds.Left;
+            top = window.RestoreBounds.Top;
+            width = window.RestoreBounds.Width;
+            height = window.RestoreBounds.Height;
+            return;
         }
-        else
-        {
-            WindowLeft = window.Left;
-            WindowTop = window.Top;
-            WindowWidth = window.Width;
-            WindowHeight = window.Height;
-        }
+
+        left = window.Left;
+        top = window.Top;
+        width = window.Width;
+        height = window.Height;
     }
 }
 

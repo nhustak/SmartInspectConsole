@@ -568,7 +568,15 @@ public class MainViewModel : ViewModelBase, IDisposable
             Owner = Application.Current.MainWindow
         };
 
-        if (dialog.ShowDialog() == true)
+        var state = AppState.Load();
+        state.ApplyEditViewDialogSettings(dialog);
+
+        var result = dialog.ShowDialog();
+
+        state.CaptureEditViewDialogSettings(dialog);
+        state.Save();
+
+        if (result == true)
         {
             using (view.DeferRefresh())
             {

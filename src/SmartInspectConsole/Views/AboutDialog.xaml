@@ -61,12 +61,6 @@
                 </Hyperlink>
             </TextBlock>
 
-            <TextBlock Text="Built with Claude Code"
-                       FontSize="11"
-                       TextAlignment="Center"
-                       Foreground="{DynamicResource ForegroundSecondaryBrush}"
-                       Margin="0,0,0,4"/>
-
             <TextBlock Text="Powered by Codex"
                        FontSize="11"
                        FontWeight="SemiBold"

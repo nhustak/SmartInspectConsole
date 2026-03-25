@@ -7,8 +7,8 @@
         mc:Ignorable="d"
         Title="Edit View"
         Icon="/Resources/smartinspectconsole.png"
-        Height="680" Width="520"
-        MinHeight="500" MinWidth="400"
+        Height="760" Width="620"
+        MinHeight="560" MinWidth="480"
         WindowStartupLocation="CenterOwner"
         ResizeMode="CanResizeWithGrip"
         ShowInTaskbar="False"
@@ -71,11 +71,6 @@
                             <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
                         </Border>
                         <ControlTemplate.Triggers>
-                            <Trigger Property="IsChecked" Value="True">
-                                <Setter TargetName="border" Property="Background" Value="#1976D2"/>
-                                <Setter TargetName="border" Property="BorderBrush" Value="#1565C0"/>
-                                <Setter Property="Foreground" Value="White"/>
-                            </Trigger>
                             <Trigger Property="IsMouseOver" Value="True">
                                 <Setter TargetName="border" Property="BorderBrush" Value="#2196F3"/>
                             </Trigger>
@@ -90,7 +85,7 @@
     <DockPanel Margin="16">
         <!-- Buttons - docked at bottom so always visible -->
         <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,8,0,0">
-            <Button Content="OK" IsDefault="True" Click="OK_Click"/>
+            <Button Content="OK" Click="OK_Click"/>
             <Button Content="Cancel" IsCancel="True" Click="Cancel_Click"/>
         </StackPanel>
 
@@ -109,26 +104,6 @@
                         <!-- Application Filter -->
                         <StackPanel Margin="0,0,0,8">
                             <Label Content="Application:" Padding="0,0,0,4"/>
-                            <ItemsControl ItemsSource="{Binding SelectedAppFilters}"
-                                          Visibility="{Binding SelectedAppFilters.Count, Converter={StaticResource CountToVisibility}, FallbackValue=Collapsed}">
-                                <ItemsControl.ItemsPanel>
-                                    <ItemsPanelTemplate>
-                                        <WrapPanel/>
-                                    </ItemsPanelTemplate>
-                                </ItemsControl.ItemsPanel>
-                                <ItemsControl.ItemTemplate>
-                                    <DataTemplate>
-                                        <ToggleButton Style="{StaticResource TagToggleButton}"
-                                                      IsChecked="True"
-                                                      Click="RemoveAppTag_Click">
-                                            <StackPanel Orientation="Horizontal">
-                                                <TextBlock Text="{Binding}"/>
-                                                <TextBlock Text=" ×" FontWeight="Bold"/>
-                                            </StackPanel>
-                                        </ToggleButton>
-                                    </DataTemplate>
-                                </ItemsControl.ItemTemplate>
-                            </ItemsControl>
                             <ItemsControl ItemsSource="{Binding AvailableAppNames}"
                                           Visibility="{Binding AvailableAppNames.Count, Converter={StaticResource CountToVisibility}, FallbackValue=Collapsed}">
                                 <ItemsControl.ItemsPanel>
@@ -153,26 +128,6 @@
                         <!-- Session Filter -->
                         <StackPanel Margin="0,0,0,8">
                             <Label Content="Session:" Padding="0,0,0,4"/>
-                            <ItemsControl ItemsSource="{Binding SelectedSessionFilters}"
-                                          Visibility="{Binding SelectedSessionFilters.Count, Converter={StaticResource CountToVisibility}, FallbackValue=Collapsed}">
-                                <ItemsControl.ItemsPanel>
-                                    <ItemsPanelTemplate>
-                                        <WrapPanel/>
-                                    </ItemsPanelTemplate>
-                                </ItemsControl.ItemsPanel>
-                                <ItemsControl.ItemTemplate>
-                                    <DataTemplate>
-                                        <ToggleButton Style="{StaticResource TagToggleButton}"
-                                                      IsChecked="True"
-                                                      Click="RemoveSessionTag_Click">
-                                            <StackPanel Orientation="Horizontal">
-                                                <TextBlock Text="{Binding}"/>
-                                                <TextBlock Text=" ×" FontWeight="Bold"/>
-                                            </StackPanel>
-                                        </ToggleButton>
-                                    </DataTemplate>
-                                </ItemsControl.ItemTemplate>
-                            </ItemsControl>
                             <ItemsControl ItemsSource="{Binding AvailableSessions}"
                                           Visibility="{Binding AvailableSessions.Count, Converter={StaticResource CountToVisibility}, FallbackValue=Collapsed}">
                                 <ItemsControl.ItemsPanel>
@@ -197,26 +152,6 @@
                         <!-- Hostname Filter -->
                         <StackPanel Margin="0,0,0,8">
                             <Label Content="Hostname:" Padding="0,0,0,4"/>
-                            <ItemsControl ItemsSource="{Binding SelectedHostnameFilters}"
-                                          Visibility="{Binding SelectedHostnameFilters.Count, Converter={StaticResource CountToVisibility}, FallbackValue=Collapsed}">
-                                <ItemsControl.ItemsPanel>
-                                    <ItemsPanelTemplate>
-                                        <WrapPanel/>
-                                    </ItemsPanelTemplate>
-                                </ItemsControl.ItemsPanel>
-                                <ItemsControl.ItemTemplate>
-                                    <DataTemplate>
-                                        <ToggleButton Style="{StaticResource TagToggleButton}"
-                                                      IsChecked="True"
-                                                      Click="RemoveHostnameTag_Click">
-                                            <StackPanel Orientation="Horizontal">
-                                                <TextBlock Text="{Binding}"/>
-                                                <TextBlock Text=" ×" FontWeight="Bold"/>
-                                            </StackPanel>
-                                        </ToggleButton>
-                                    </DataTemplate>
-                                </ItemsControl.ItemTemplate>
-                            </ItemsControl>
                             <ItemsControl ItemsSource="{Binding AvailableHostnames}"
                                           Visibility="{Binding AvailableHostnames.Count, Converter={StaticResource CountToVisibility}, FallbackValue=Collapsed}">
                                 <ItemsControl.ItemsPanel>
@@ -260,6 +195,21 @@
                         </Grid>
                     </StackPanel>
                 </GroupBox>
+
+                <!-- Info Text -->
+                <Border Background="#FFFDE7" BorderBrush="#FFC107" BorderThickness="1"
+                        Padding="8" Margin="0,0,0,8" CornerRadius="4">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="&#x2139;" FontSize="16" Foreground="#F57C00" Margin="0,0,8,0" VerticalAlignment="Top"/>
+                        <TextBlock TextWrapping="Wrap" Foreground="#5D4037" FontSize="12">
+                            <Run FontWeight="Bold">Tip:</Run> Click tags to quickly add or remove filter values.
+                            <LineBreak/>
+                            Clicked values appear in the text boxes.
+                            <LineBreak/>
+                            You can also type comma-separated values in the text boxes.
+                        </TextBlock>
+                    </StackPanel>
+                </Border>
 
                 <!-- Title Matching -->
                 <GroupBox Header="Title Matching">
@@ -332,20 +282,6 @@
                     </WrapPanel>
                 </GroupBox>
 
-                <!-- Info Text -->
-                <Border Background="#FFFDE7" BorderBrush="#FFC107" BorderThickness="1"
-                        Padding="8" Margin="0,0,0,8" CornerRadius="4">
-                    <StackPanel Orientation="Horizontal">
-                        <TextBlock Text="&#x2139;" FontSize="16" Foreground="#F57C00" Margin="0,0,8,0" VerticalAlignment="Top"/>
-                        <TextBlock TextWrapping="Wrap" Foreground="#5D4037" FontSize="12">
-                            <Run FontWeight="Bold">Tip:</Run> Click tags to quickly select/deselect filters.
-                            <LineBreak/>
-                            Tags appear automatically as log entries are received.
-                            <LineBreak/>
-                            You can also type comma-separated values in the text boxes.
-                        </TextBlock>
-                    </StackPanel>
-                </Border>
             </StackPanel>
         </ScrollViewer>
     </DockPanel>
