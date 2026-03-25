@@ -1,279 +1,205 @@
 # SmartInspect Console
 
-**Version 1.0.0**
+A modern Windows console for SmartInspect logs with live filtering, multi-view analysis, browser ingestion, and production-grade load handling.
 
-A WPF-based replacement console for receiving and displaying real-time logging data from SmartInspectCore logging system.
+This project exists because the original SmartInspect Console never really got the refresh it deserved. SmartInspect itself is still one of the most useful tools in the box, and this app is meant to make those logs far easier to work with in 2026.
 
-## Overview
+Claude got this project moving. Codex is now my tool of choice for all of my development.
 
-I've been using SmartInspect for a looooonnngggg time.  I found it way back in my Delphi days (I was one of the early adopters).
-I still use it, despite the fact the console hasn't had a refresh in...lord...20 years?
-It looked like Code Partners was going to advance it but it seems to have stalled.
+You still need the actual SmartInspect product and you should buy it:
+[https://code-partners.com/offerings/smartinspect/](https://code-partners.com/offerings/smartinspect/)
 
-So it occurred to me...Claude could probably solve this pain point for me.
+## Current State
 
-The code in this project is 100% Claude Code.
+SmartInspect Console is a WPF replacement for the original Gurock SmartInspect Console. It currently supports:
 
-So here we go - if you use SmartInspect, you should love this.   I have no idea if I'm breaking copyright here.  If I am, well they can give me a take down and I'll pull it.
-I hope they see it for what it is - something to make the console logs far more usable and maybe get them some sales.
+- Native SmartInspect clients over TCP on port `4228`
+- Native SmartInspect clients over named pipe `smartinspect`
+- Browser and JavaScript clients over WebSocket on port `4229`
+- HTTP relay forwarding for production/browser scenarios
+- Multi-tab log analysis with persistent layout and filter state
+- High-volume ingestion with queue diagnostics, batch rendering, and automatic retention trimming
 
-You still must buy the product and you should.  It is one of the most useful tools I have.
-https://code-partners.com/offerings/smartinspect/
+The desktop app now includes an in-app load test launcher under `Help > Run Load Test`.
 
-For instance, I have it setup with a memory buffer.  If the app crashes, it grabs that buffer and puts in the email.  I can then pull it up in the console (this console can't yet) and review the logs for what was happening over the last few minutes.
+## Highlights
 
+### Log Ingestion
 
-SmartInspect Console is a replacement for the original Gurock SmartInspect Console. It receives log packets from SmartInspectCore applications via TCP (port 4228) and Named Pipes (`smartinspect`), displaying them in a real-time viewer.
+- TCP listener for standard SmartInspect traffic
+- Named pipe listener for local desktop/service scenarios
+- WebSocket listener for browser clients
+- HTTP relay service and embeddable ASP.NET Core relay package
+- SmartInspect binary protocol support for `LogEntry`, `Watch`, `ProcessFlow`, `ControlCommand`, and `LogHeader`
 
-## Features
+### Log Viewing
 
-### Core Functionality
-- **Real-time Logging**: Receive and display log entries as they arrive
-- **Multiple Protocols**: Listen on both TCP (port 4228) and Named Pipes simultaneously
-- **Multiple Views/Tabs**: Create multiple filtered views of the same log data
-- **Drag-and-Drop Tab Reordering**: Rearrange tabs by dragging them; order persists across sessions
-- **Session Filtering**: Filter log entries by session name
-- **Text Search**: Search through log entries by title or content
-- **Log Level Filtering**: Filter by minimum log level (Debug, Verbose, Message, Warning, Error, Fatal)
-- **Auto-Scroll**: Toggle auto-scroll to newest entries per view
-- **Clear View**: Clear only the current view's log entries (button on each tab's toolbar)
-- **Clear All**: Clear all log entries across all views (toolbar button)
-- **Watches Panel**: Monitor variable values in real-time
-- **Process Flow Panel**: Track method entry/exit and thread flow
-- **Control Commands**: Handle clear commands from clients
+- Multiple saved views over the same underlying log stream
+- Per-view text filtering, session filtering, and minimum level filtering
+- Per-view auto-scroll
+- Drag-and-drop tab reordering with persisted order
+- View duplication, rename, edit, and remove support
+- Column visibility toggles and separator display
+- Context menu actions for mute, copy, clear, and view management
 
-### Detail View
-- **Smart Data Detection**: Auto-detect JSON, XML, Key-Value pairs, Binary, or plain Text
-- **Format Dropdown**: Manually override format detection
-- **JSON Formatting**: Pretty-print JSON data with proper indentation
-- **XML Formatting**: Format XML documents
-- **Binary Hex View**: Display binary data in hex dump format
-- **Key-Value Formatting**: Align key-value pairs for readability
-- **Copy to Clipboard**: One-click copy of formatted data
-- **Multiple Detail Tabs**: Open multiple log entries in separate tabs
+### Details / Payload Inspection
 
-### UI Features
-- **Dark/Light Themes**: Toggle between dark and light themes
-- **Column Visibility**: Show/hide columns (Time, Elapsed, App, Session, Title, Thread)
-- **Separator Display**: Visual horizontal line separators in log list
-- **Icon Legend**: Reference dialog showing all log entry type icons and colors
-- **State Persistence**: Saves window position, size, theme, view configurations
-- **Layout Export/Import**: Export and import layout configurations
+- Separate detail tabs for opened entries
+- Automatic data detection for text, JSON, XML, key/value, and binary payloads
+- Pretty formatting for JSON and XML
+- Hex/binary display for non-text payloads
+- One-click copy of formatted payload data
+- Cleaner detail panel presentation without the old header strip
 
-### Settings
-- **Configurable TCP Port**: Change the listening port (default: 4228)
-- **Configurable Pipe Name**: Change the pipe name (default: smartinspect)
-- **Configurable WebSocket Port**: Change the WebSocket port for browser clients (default: 4229)
-- **Per-View Settings**: Each view maintains its own filter and display settings
+### Watches / Process Flow / Connections
 
-## Project Structure
+- Live watch display
+- Live process flow display
+- Connected application list with message counts and mute toggles
+- Immediate connection counts in the status bar for TCP, pipe, and WebSocket listeners
+- Connection identification/merging by app and host once client identity is known
 
-```
+### Performance / Stability
+
+- Batched UI ingestion instead of per-packet UI updates
+- Adaptive batch sizing under backlog
+- Coalesced/deferred filter refresh work
+- Cached payload string decoding for expensive text filters
+- Improved auto-scroll behavior under sustained load
+- Queue depth and render diagnostics in the status bar
+- Automatic retention limit with chunked trim-back behavior
+- Default retention lowered from `100,000` to `20,000` entries for better responsiveness
+
+### App / UX
+
+- Dark and light themes
+- Layout persistence
+- Window placement persistence
+- Layout export/import
+- Version displayed in the main window title
+- Settings dialog for listener ports, pipe name, debug mode, retention cap, and confirm-before-clear
+- Help menu entry to launch the built-in load tester
+
+## Load Handling Notes
+
+One of the major goals of the recent work was stopping the app from eventually locking up under production-level log volume.
+
+Recent improvements include:
+
+- reduced repeated whole-view refresh work
+- removed repeated full filtered-count rescans
+- cached decoded payload text instead of re-decoding repeatedly
+- improved auto-scroll event handling
+- added batching diagnostics
+- tuned retention trimming to trim back to `90%` of the cap instead of deleting `1:1`
+
+With the current defaults:
+
+- max retained log entries defaults to `20,000`
+- once the limit is exceeded, the app trims back to roughly `18,000`
+
+That gives the app a visible rolling window without constant micro-trimming.
+
+## Repository Layout
+
+```text
 SmartInspectConsole/
-├── SmartInspectConsole.sln
-├── smartinspect-js/                      # Browser logging library (TypeScript)
+├── README.md
+├── docs/
+│   └── load-tester.md
+├── smartinspect-js/
 │   ├── src/
-│   │   ├── connections/                  # Connection transports
-│   │   │   ├── IConnection.ts           # Connection interface
-│   │   │   ├── WebSocketConnection.ts   # WebSocket transport
-│   │   │   └── HttpConnection.ts        # HTTP POST transport
-│   │   ├── SmartInspect.ts              # Main client class
-│   │   ├── Session.ts                   # Logging session
-│   │   └── types.ts                     # TypeScript types
-│   └── dist/                            # Built bundles
-│
-└── src/
-    ├── SmartInspectConsole/              # WPF Application
-    │   ├── Behaviors/                    # Attached behaviors (AutoScroll)
-    │   ├── Converters/                   # Value converters
-    │   ├── Resources/                    # Theme files (Dark/Light)
-    │   ├── Services/                     # App state persistence
-    │   ├── ViewModels/                   # MVVM view models
-    │   └── Views/                        # XAML views and dialogs
-    │
-    ├── SmartInspectConsole.Core/         # Protocol Library
-    │   ├── Enums/                        # Protocol enumerations
-    │   ├── Events/                       # Event argument classes
-    │   ├── Listeners/                    # TCP and Pipe listeners
-    │   ├── Packets/                      # Packet data classes
-    │   └── Parsing/                      # Binary packet parser
-    │
-    ├── SmartInspect.Relay.AspNetCore/    # Embeddable Relay Library (NuGet)
-    │   ├── Configuration/                # SmartInspectRelayOptions
-    │   ├── Extensions/                   # AddSmartInspectRelay()
-    │   ├── Routing/                      # MapSmartInspectRelay()
-    │   ├── Services/                     # ILogForwarder implementations
-    │   └── Internal/                     # Endpoint handlers
-    │
-    └── SmartInspectConsole.Relay/        # Standalone HTTP Relay Service
-        ├── Program.cs                    # Uses SmartInspect.Relay.AspNetCore
-        └── appsettings.json              # Configuration
+│   └── dist/
+├── src/
+│   ├── SmartInspectConsole/             # WPF desktop app
+│   ├── SmartInspectConsole.Core/        # SmartInspect protocol + listeners
+│   ├── SmartInspectConsole.LoadTester/  # Stress/load test utility
+│   ├── SmartInspect.Relay.AspNetCore/   # Embeddable ASP.NET Core relay
+│   └── SmartInspectConsole.Relay/       # Standalone relay service
+└── SmartInspectConsole.slnx
 ```
 
 ## Building
 
-```bash
-cd C:\ProjDotNet\SmartInspectConsole
-dotnet build
+```powershell
+dotnet build .\src\SmartInspectConsole\SmartInspectConsole.csproj
 ```
 
 ## Running
 
-```bash
-dotnet run --project src/SmartInspectConsole
+```powershell
+dotnet run --project .\src\SmartInspectConsole
 ```
 
-## Usage
+When the desktop app starts, it automatically starts listening on:
 
-1. Start the SmartInspect Console
-2. The console automatically starts listening on:
-   - TCP port 4228 (SmartInspectCore binary protocol)
-   - Named pipe `smartinspect` (SmartInspectCore binary protocol)
-   - WebSocket port 4229 (smartinspect-js JSON protocol)
-3. Connect your SmartInspectCore application:
+- `TCP 4228`
+- named pipe `smartinspect`
+- `WebSocket 4229`
+
+## SmartInspect .NET Usage
 
 ```csharp
-// Using SmartInspectCore
+SiAuto.Si.AppName = "MyApp";
+SiAuto.Si.Connections = @"pipe(reconnect=""true"", reconnect.interval=""5s"")";
 SiAuto.Si.Enabled = true;
-SiAuto.Main.LogMessage("Hello from my app!");
 
-// Or with explicit configuration
-var si = new SmartInspect("MyApp");
-si.Connections = "pipe()";  // or "tcp()"
-si.Enabled = true;
-var session = si.AddSession("Main");
-session.LogMessage("Connected!");
-
-// Advanced: Memory buffer with auto-reconnect and failover
-// This keeps a 2048KB memory buffer that can be retrieved on crash,
-// with automatic reconnection to pipe and TCP fallback
-si.Connections = "mem(maxsize=2048, astext=true), " +
-                 "pipe(reconnect=true, reconnect.interval=5s), " +
-                 "tcp(host=localhost, reconnect=true, reconnect.interval=5s)";
+SiAuto.Main.LogMessage("Hello from SmartInspect");
 ```
 
-## JavaScript/Browser Logging (smartinspect-js)
+A more defensive connection string can include memory buffering and fallback targets:
 
-**Note: This only works with this new console - not the original Gurock SmartInspect Console.**
-
-The `smartinspect-js` library allows browser-based JavaScript and TypeScript applications to send logs to the SmartInspect Console via WebSocket (port 4229) or HTTP POST (via the relay service).
-
-### Installation
-
-```bash
-npm install smartinspect-js
+```csharp
+SiAuto.Si.Connections =
+    @"mem(maxsize=2048, astext=true),
+      pipe(reconnect=""true"", reconnect.interval=""5s""),
+      tcp(host=""localhost"", reconnect=""true"", reconnect.interval=""5s"")";
 ```
 
-Or include directly in your HTML:
-```html
-<script src="path/to/smartinspect.js"></script>
-```
+## Browser / JavaScript Usage
 
-### Usage
+The `smartinspect-js` package targets this console, not the legacy Gurock console.
 
-```typescript
-import { SmartInspect, Session } from 'smartinspect-js';
-
-// Create and configure SmartInspect instance
-const si = new SmartInspect('My Browser App');
-si.connect('ws://localhost:4229');
-
-// Create a session for logging
-const session = si.addSession('Main');
-
-// Log messages at different levels
-session.logDebug('Debug information');
-session.logVerbose('Verbose details');
-session.logMessage('General message');
-session.logWarning('Warning message');
-session.logError('Error occurred');
-session.logFatal('Fatal error!');
-
-// Log with data
-session.logMessage('User data', { userId: 123, name: 'John' });
-
-// Enter/Leave method tracking
-session.enterMethod('processData');
-// ... do work ...
-session.leaveMethod('processData');
-
-// Watch variables
-session.watch('counter', 42);
-session.watch('status', 'active');
-```
-
-### HTTP Mode (Production)
-
-For production environments where WebSockets may be blocked by firewalls or proxies, use HTTP mode with the SmartInspect Relay service:
+### WebSocket Example
 
 ```typescript
 import { SmartInspect } from 'smartinspect-js';
 
-// HTTP mode with batching
+const si = new SmartInspect('My Browser App');
+await si.connect('ws://localhost:4229');
+
+const session = si.addSession('Main');
+session.logMessage('Browser connected');
+session.logError('Something failed');
+session.watch('counter', 42);
+session.enterMethod('loadPage');
+session.leaveMethod('loadPage');
+```
+
+### HTTP Relay Example
+
+```typescript
+import { SmartInspect } from 'smartinspect-js';
+
 const si = new SmartInspect('My Production App', {
   connectionType: 'http',
   httpOptions: {
     endpoint: 'https://logs.example.com/api/v1/logs',
-    apiKey: 'optional-api-key',
-    flushInterval: 2000,     // Flush every 2 seconds
-    maxBatchSize: 100,       // Or when 100 messages accumulate
-    compression: true        // Gzip compress large batches
+    flushInterval: 2000,
+    maxBatchSize: 100,
+    compression: true
   }
 });
 
 await si.connect();
-si.mainSession.logMessage('Hello from production!');
+si.mainSession.logMessage('Hello from production');
 ```
 
-**HTTP Mode Features:**
-- Message batching with configurable interval and batch size
-- Priority flush for error/fatal messages (sent immediately)
-- Automatic page unload handling via `navigator.sendBeacon()`
-- Exponential backoff retry on failures
-- Optional gzip compression for large payloads
+## Relay Options
 
-### Features
-
-- WebSocket-based communication (no CORS issues with localhost)
-- Full logging level support (Debug, Verbose, Message, Warning, Error, Fatal)
-- Method entry/exit tracking for process flow visualization
-- Variable watching for real-time monitoring
-- Automatic reconnection on connection loss
-- TypeScript support with full type definitions
-
-### Console Configuration
-
-The console listens on WebSocket port 4229 by default. This can be changed in Settings (File > Settings).
-
-## SmartInspect Relay (HTTP Gateway)
-
-The SmartInspect Relay accepts HTTP POST requests from browsers and forwards them to the SmartInspect Console via WebSocket. Use this for production environments where:
-
-- WebSockets may be blocked by corporate firewalls or proxies
-- The console is on a different network than the browser
-- Serverless/cloud deployments can't maintain persistent connections
-
-### Architecture
-
-```
-┌─────────────────────┐     HTTPS POST      ┌─────────────────────┐
-│   Browser App       │ ─────────────────── │   Relay Service     │
-│   (smartinspect-js) │     (JSON batch)    │   (ASP.NET Core)    │
-└─────────────────────┘                     └─────────────────────┘
-                                                      │
-                                                      │ WebSocket
-                                                      ▼
-                                            ┌─────────────────────┐
-                                            │ SmartInspect Console│
-                                            └─────────────────────┘
-```
-
-### Option 1: Embed in Your Website (Recommended)
-
-Use the `SmartInspect.Relay.AspNetCore` library to add relay endpoints directly to your existing ASP.NET Core website:
+### Embedded in an ASP.NET Core App
 
 ```csharp
-// Program.cs - Add to your existing website
 builder.Services.AddSmartInspectRelay(options =>
 {
     options.ConsoleHost = "localhost";
@@ -283,124 +209,48 @@ builder.Services.AddSmartInspectRelay(options =>
 app.MapSmartInspectRelay("/api/v1");
 ```
 
-**Callback Mode** - If your website already uses SmartInspect for server-side logging:
+### Standalone Relay
 
-```csharp
-// Forward browser logs through your existing SmartInspect session
-var browserSession = SiAuto.Si.AddSession("Browser");
-
-builder.Services.AddSmartInspectRelay(
-    onLogEntry: (level, title, data, viewer) =>
-    {
-        switch (level)
-        {
-            case "error": browserSession.LogError(title); break;
-            case "warning": browserSession.LogWarning(title); break;
-            default: browserSession.LogMessage(title); break;
-        }
-    },
-    onWatch: (name, value, type) => browserSession.WatchString(name, value)
-);
-
-app.MapSmartInspectRelay("/api/v1");
+```powershell
+dotnet run --project .\src\SmartInspectConsole.Relay
 ```
 
-The library targets `net8.0`, `net9.0`, and `net10.0`.
+Default relay endpoints:
 
-### Option 2: Standalone Relay Service
+| Endpoint | Method | Purpose |
+|---|---|---|
+| `/api/v1/logs` | `POST` | Accepts one log message or a batch |
+| `/api/v1/health` | `GET` | Basic health check |
+| `/api/v1/status` | `GET` | Relay connection and buffering status |
 
-Run the relay as a separate service:
+## Load Tester
 
-```bash
-cd src/SmartInspectConsole.Relay
-dotnet run
+The repo includes a dedicated stress tool at `src/SmartInspectConsole.LoadTester`.
+
+Manual examples:
+
+```powershell
+dotnet run --project .\src\SmartInspectConsole.LoadTester -- --transport tcp --clients 8 --messages-per-second 2000 --payload-bytes 1024 --duration-seconds 300
+dotnet run --project .\src\SmartInspectConsole.LoadTester -- --transport pipe --pipe smartinspect --clients 4 --messages-per-second 1000 --payload-bytes 1024 --duration-seconds 180
 ```
 
-The relay starts on `http://localhost:5000` by default.
+You can also launch a default TCP load test from the desktop app:
 
-### API Endpoints
+- `Help > Run Load Test`
 
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/api/v1/logs` | POST | Accept single message or batch |
-| `/api/v1/health` | GET | Health check |
-| `/api/v1/status` | GET | Connection status and statistics |
+That starts the existing load tester in a visible PowerShell window against the app's current TCP port.
 
-### Configuration (appsettings.json)
+## Current Caveats
 
-```json
-{
-  "Relay": {
-    "ConsoleHost": "localhost",
-    "ConsolePort": 4229,
-    "BufferSize": 10000,
-    "ReconnectDelayMs": 5000,
-    "MaxReconnectAttempts": 0
-  }
-}
-```
-
-### Features
-
-- **Message Buffering**: Queues up to 10,000 messages when console is unavailable
-- **Auto-Reconnect**: Automatically reconnects to console with exponential backoff
-- **Request Decompression**: Accepts gzipped request bodies
-- **CORS Support**: Configured for cross-origin requests
-- **Two Modes**: WebSocket (forward to console) or Callback (integrate with existing logging)
-
-## Protocol Compatibility
-
-The console is fully compatible with SmartInspectCore's binary protocol:
-
-| Packet Type | Supported |
-|-------------|-----------|
-| LogEntry | Yes |
-| Watch | Yes |
-| ProcessFlow | Yes |
-| ControlCommand | Yes |
-| LogHeader | Yes |
-
-## UI Layout
-
-```
-┌────────────────────────────────────────────────────────────────────┐
-│ File  View  Help                                                   │
-├────────────────────────────────────────────────────────────────────┤
-│ [Start] [Stop] [Clear] | Filter: [___________] | Session: [____▼] │
-├───────────────────────────────────────┬────────────────────────────┤
-│ Log Entries                           │ Details                    │
-│ ┌─────────────────────────────────┐   │ Title: ...                 │
-│ │ Time    │ Type │ Session │ Title│   │ Session: ...               │
-│ │─────────│──────│─────────│──────│   │ Timestamp: ...             │
-│ │ 10:23   │ 💬   │ Main    │ ...  │   │ Data: ...                  │
-│ └─────────────────────────────────┘   │                            │
-├───────────────────────────────────────┤                            │
-│ Watches                               │                            │
-│ │ Name │ Value │ Type │ Time │        │                            │
-├───────────────────────────────────────┤                            │
-│ Process Flow                          │                            │
-│ │ Type │ Title │ Thread │ Time │      │                            │
-├────────────────────────────────────────────────────────────────────┤
-│ Ready │ TCP: 4228 │ Pipe: smartinspect │ WS: 4229 │ Entries: 0  │
-└────────────────────────────────────────────────────────────────────┘
-```
-
-## TODO
-
-- [ ] Import and export log files (.sil format)
-- [ ] Search/filter across all columns
-- [ ] Bookmarks for important log entries
-- [ ] Log entry highlighting rules
-- [ ] Memory buffer retrieval from crashed applications
-- [ ] Statistics/metrics dashboard
-- [ ] Log file watching (tail -f style)
-- [ ] Email digest feature (zip and send logs on schedule or immediately on errors for unattended operation)
-- [ ] File logging with per-view settings (continuous audit logs with rotation, max files, size limits)
+- The Connections panel only shows clients once they are identified by client metadata such as `LogHeader`. Raw transport counts can be higher than the visible identified connection list.
+- WebSocket clients may be connected before they have sent enough identifying data to appear by application name in the Connections panel.
+- Import/export of `.sil` files is supported in the desktop app, but memory-buffer crash retrieval workflows are still not implemented end-to-end.
 
 ## Requirements
 
-- .NET 10.0 or later
-- Windows (WPF application)
+- Windows
+- .NET 10 SDK for the desktop app
+- .NET 9/10 compatible environment for the supporting projects
 
 ## License
 
