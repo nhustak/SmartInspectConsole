@@ -242,6 +242,10 @@
                 <MenuItem Header="_About" Click="About_Click">
                     <MenuItem.Icon><TextBlock Text="&#xE897;" FontFamily="Segoe Fluent Icons" FontSize="14"/></MenuItem.Icon>
                 </MenuItem>
+                <Separator/>
+                <MenuItem Header="Run _Load Test" Command="{Binding RunLoadTestCommand}">
+                    <MenuItem.Icon><TextBlock Text="&#xE9D9;" FontFamily="Segoe Fluent Icons" FontSize="14"/></MenuItem.Icon>
+                </MenuItem>
             </MenuItem>
         </Menu>
 
@@ -673,11 +677,48 @@
                                 <GridViewColumn Header="Application" Width="140" DisplayMemberBinding="{Binding AppName}"/>
                                 <GridViewColumn Header="Host" Width="110" DisplayMemberBinding="{Binding HostName}"/>
                                 <GridViewColumn Header="Messages" Width="80" DisplayMemberBinding="{Binding MessageCount, StringFormat=N0}"/>
-                                <GridViewColumn Header="Muted" Width="50">
+                                <GridViewColumn Header="Muted" Width="96">
                                     <GridViewColumn.CellTemplate>
                                         <DataTemplate>
                                             <CheckBox IsChecked="{Binding IsMuted}"
-                                                      ToolTip="Mute/unmute - muted apps have messages discarded"/>
+                                                      HorizontalAlignment="Center"
+                                                      VerticalAlignment="Center"
+                                                      ToolTip="Mute/unmute - muted apps have messages discarded">
+                                                <CheckBox.Template>
+                                                    <ControlTemplate TargetType="CheckBox">
+                                                        <Border x:Name="Box"
+                                                                Width="18"
+                                                                Height="18"
+                                                                Background="{DynamicResource BackgroundBrush}"
+                                                                BorderBrush="{DynamicResource BorderBrush}"
+                                                                BorderThickness="1"
+                                                                CornerRadius="4"
+                                                                SnapsToDevicePixels="True">
+                                                            <Path x:Name="CheckGlyph"
+                                                                  Data="M 3 9 L 7 13 L 15 5"
+                                                                  Stroke="White"
+                                                                  StrokeThickness="2"
+                                                                  StrokeStartLineCap="Round"
+                                                                  StrokeEndLineCap="Round"
+                                                                  StrokeLineJoin="Round"
+                                                                  Visibility="Collapsed"/>
+                                                        </Border>
+                                                        <ControlTemplate.Triggers>
+                                                            <Trigger Property="IsChecked" Value="True">
+                                                                <Setter TargetName="Box" Property="Background" Value="{DynamicResource AccentBrush}"/>
+                                                                <Setter TargetName="Box" Property="BorderBrush" Value="{DynamicResource AccentBrush}"/>
+                                                                <Setter TargetName="CheckGlyph" Property="Visibility" Value="Visible"/>
+                                                            </Trigger>
+                                                            <Trigger Property="IsMouseOver" Value="True">
+                                                                <Setter TargetName="Box" Property="BorderBrush" Value="{DynamicResource AccentBrush}"/>
+                                                            </Trigger>
+                                                            <Trigger Property="IsEnabled" Value="False">
+                                                                <Setter TargetName="Box" Property="Opacity" Value="0.5"/>
+                                                            </Trigger>
+                                                        </ControlTemplate.Triggers>
+                                                    </ControlTemplate>
+                                                </CheckBox.Template>
+                                            </CheckBox>
                                         </DataTemplate>
                                     </GridViewColumn.CellTemplate>
                                 </GridViewColumn>

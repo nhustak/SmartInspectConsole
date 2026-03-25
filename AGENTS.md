@@ -9,5 +9,7 @@
 - C:\Project\SmartInspectConsole
 
 ## Local workflow
-- Before running the app for validation, shut down any currently running `SmartInspectConsole` process.
-- When asked to prepare and run the app, increment the application version by one revision (`x.y.z.n` -> `x.y.z.(n+1)`), build, and start the updated app.
+- For any change in this repository, always shut down any currently running `SmartInspectConsole` process before validating.
+- For any change in this repository, always increment the application version by one revision (`x.y.z.n` -> `x.y.z.(n+1)`), build, and start the updated app before responding.
+- Do not wait for a separate reminder. Treat stop, version bump, build, and restart as part of the default completion workflow for this repository.
+- This is the required development cycle for this repository unless the user explicitly says otherwise.

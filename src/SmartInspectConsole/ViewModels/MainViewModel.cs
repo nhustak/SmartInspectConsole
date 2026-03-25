@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Diagnostics;
+using System.IO;
 using System.Reflection;
 using System.Windows;
 using System.Windows.Data;
@@ -137,6 +138,7 @@ public class MainViewModel : ViewModelBase, IDisposable
         // File I/O commands
         OpenLogFileCommand = new AsyncRelayCommand(OpenLogFileAsync);
         SaveLogFileCommand = new AsyncRelayCommand(SaveLogFileAsync, () => LogEntries.Count > 0);
+        RunLoadTestCommand = new RelayCommand(RunLoadTest);
 
         // Detail tab commands
         OpenLogEntryDetailCommand = new RelayCommand<LogEntry>(OpenLogEntryDetail);
@@ -350,6 +352,7 @@ public class MainViewModel : ViewModelBase, IDisposable
     // File I/O
     public ICommand OpenLogFileCommand { get; }
     public ICommand SaveLogFileCommand { get; }
+    public ICommand RunLoadTestCommand { get; }
 
     // Tab management
     public ICommand AddViewCommand { get; }
@@ -1552,6 +1555,57 @@ public class MainViewModel : ViewModelBase, IDisposable
         }
     }
 
+    private void RunLoadTest()
+    {
+        try
+        {
+            var repoRoot = FindRepoRoot();
+            if (repoRoot == null)
+            {
+                MessageBoxHelper.Show(
+                    "Could not locate the SmartInspectConsole repository root from the running application.",
+                    "Load Test",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Warning);
+                return;
+            }
+
+            var loadTesterProjectPath = Path.Combine(repoRoot, "src", "SmartInspectConsole.LoadTester", "SmartInspectConsole.LoadTester.csproj");
+            if (!File.Exists(loadTesterProjectPath))
+            {
+                MessageBoxHelper.Show(
+                    $"Load tester project not found:\n\n{loadTesterProjectPath}",
+                    "Load Test",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Warning);
+                return;
+            }
+
+            var arguments =
+                $"-NoExit -Command \"dotnet run --project '{loadTesterProjectPath}' -- --transport tcp --host localhost --port {_tcpPort} --clients 4 --messages-per-second 1000 --payload-bytes 1024 --duration-seconds 300\"";
+
+            var processStartInfo = new ProcessStartInfo
+            {
+                FileName = "powershell.exe",
+                Arguments = arguments,
+                WorkingDirectory = repoRoot,
+                UseShellExecute = true
+            };
+
+            Process.Start(processStartInfo);
+            StatusText = $"Started load test against TCP port {_tcpPort}";
+        }
+        catch (Exception ex)
+        {
+            StatusText = $"Error starting load test: {ex.Message}";
+            MessageBoxHelper.Show(
+                $"Failed to start the load tester:\n\n{ex.Message}",
+                "Load Test",
+                MessageBoxButton.OK,
+                MessageBoxImage.Error);
+        }
+    }
+
     #endregion
 
     #region IDisposable
@@ -1626,6 +1680,21 @@ public class MainViewModel : ViewModelBase, IDisposable
             if (Interlocked.CompareExchange(ref _maxObservedLogQueueDepth, queueDepth, original) == original)
                 break;
         }
+    }
+
+    private static string? FindRepoRoot()
+    {
+        var current = new DirectoryInfo(AppContext.BaseDirectory);
+        while (current != null)
+        {
+            var candidate = Path.Combine(current.FullName, "src", "SmartInspectConsole.LoadTester", "SmartInspectConsole.LoadTester.csproj");
+            if (File.Exists(candidate))
+                return current.FullName;
+
+            current = current.Parent;
+        }
+
+        return null;
     }
 
     private sealed class PendingConnectionUpdate
