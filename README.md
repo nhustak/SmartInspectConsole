@@ -1,6 +1,6 @@
-# SmartInspect Console v1.0.0.58
+# SmartInspect Console v1.0.0.72
 
-Last updated: 2026-03-25
+Last updated: 2026-03-26
 
 A modern Windows console for SmartInspect logs with live filtering, multi-view analysis, browser ingestion, and production-grade load handling.
 
@@ -18,6 +18,8 @@ SmartInspect Console is a WPF replacement for the original Gurock SmartInspect C
 - Native SmartInspect clients over TCP on port `4228`
 - Native SmartInspect clients over named pipe `smartinspect`
 - Browser and JavaScript clients over WebSocket on port `4229`
+- In-process MCP server at `http://127.0.0.1:42331/mcp`
+- Local debug/query API at `http://127.0.0.1:42331/api/local/v1`
 - HTTP relay forwarding for production/browser scenarios
 - Multi-tab log analysis with persistent layout and filter state
 - High-volume ingestion with queue diagnostics, batch rendering, and automatic retention trimming
@@ -57,6 +59,8 @@ I will rename and place the actual images in the README once the files are there
 - View duplication, rename, edit, and remove support
 - Column visibility toggles and separator display
 - Context menu actions for mute, copy, clear, and view management
+- Global 12-hour AM/PM versus 24-hour time display setting
+- Dedicated `MCP Trace` tab for protocol tracing that can be toggled on and off from the app
 
 ### Details / Payload Inspection
 
@@ -86,6 +90,14 @@ I will rename and place the actual images in the README once the files are there
 - Automatic retention limit with chunked trim-back behavior
 - Default retention lowered from `100,000` to `20,000` entries for better responsiveness
 
+### Local API / MCP
+
+- The WPF app remains the single running host and the single source of truth for live logs
+- MCP is hosted inside the same app process, not as a separate companion executable
+- Local API exposes bounded log/application/context queries for debugging and contract validation
+- MCP tools are built on top of the same backend/query contracts used by the local API
+- Flagged log entries can be queried directly through the backend/API/MCP surface
+
 ### App / UX
 
 - Dark and light themes
@@ -96,7 +108,9 @@ I will rename and place the actual images in the README once the files are there
 - Layout export/import
 - Version displayed in the main window title
 - Settings dialog for listener ports, pipe name, debug mode, retention cap, and confirm-before-clear
+- Settings dialog includes a global 12-hour versus 24-hour time format option
 - Help menu entry to launch the built-in load tester
+- Tools menu includes `Trace MCP Calls` for capturing MCP traffic into the live log UI
 
 ### View Filter Editing
 
@@ -160,6 +174,21 @@ When the desktop app starts, it automatically starts listening on:
 - `TCP 4228`
 - named pipe `smartinspect`
 - `WebSocket 4229`
+- local API + MCP on `127.0.0.1:42331`
+
+## Codex MCP Setup
+
+Add this to `C:\Users\nhust\.codex\config.toml`:
+
+```toml
+[mcp_servers.smartinspect]
+url = 'http://127.0.0.1:42331/mcp'
+```
+
+Then the workflow is just:
+
+- start `SmartInspectConsole`
+- start Codex
 
 ## SmartInspect .NET Usage
 
@@ -268,6 +297,7 @@ That starts the existing load tester in a visible PowerShell window against the 
 
 - The Connections panel only shows clients once they are identified by client metadata such as `LogHeader`. Raw transport counts can be higher than the visible identified connection list.
 - WebSocket clients may be connected before they have sent enough identifying data to appear by application name in the Connections panel.
+- MCP trace entries are intentionally excluded from the built-in `All` view and are meant to be inspected in the dedicated `MCP Trace` tab.
 - Import/export of `.sil` files is supported in the desktop app, but memory-buffer crash retrieval workflows are still not implemented end-to-end.
 - There is currently no deployment pipeline, installer, or pre-compiled release package included in this repository yet. At the moment, you build and run it from source.
 

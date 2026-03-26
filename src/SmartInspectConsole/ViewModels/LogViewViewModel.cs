@@ -9,6 +9,7 @@ using System.Windows.Data;
 using System.Windows.Input;
 using SmartInspectConsole.Core.Enums;
 using SmartInspectConsole.Core.Packets;
+using SmartInspectConsole.Services;
 
 namespace SmartInspectConsole.ViewModels;
 
@@ -58,6 +59,7 @@ public class LogViewViewModel : ViewModelBase
     private bool _showSessionColumn = true;
     private bool _showTitleColumn = true;
     private bool _showThreadColumn = true;
+    private bool _excludeMcpTraceEntries;
 
     // Primary view flag
     private bool _isPrimaryView;
@@ -463,6 +465,18 @@ public class LogViewViewModel : ViewModelBase
         set => SetProperty(ref _showThreadColumn, value);
     }
 
+    public bool ExcludeMcpTraceEntries
+    {
+        get => _excludeMcpTraceEntries;
+        set
+        {
+            if (SetProperty(ref _excludeMcpTraceEntries, value))
+            {
+                RefreshFilter();
+            }
+        }
+    }
+
     #endregion
 
     public ICollectionView FilteredLogEntries { get; }
@@ -522,6 +536,9 @@ public class LogViewViewModel : ViewModelBase
     private bool FilterLogEntry(object obj)
     {
         if (obj is not LogEntry entry)
+            return false;
+
+        if (ExcludeMcpTraceEntries && IsMcpTraceEntry(entry))
             return false;
 
         // Log entry type visibility filter
@@ -606,6 +623,10 @@ public class LogViewViewModel : ViewModelBase
 
         return false;
     }
+
+    private static bool IsMcpTraceEntry(LogEntry entry)
+        => string.Equals(entry.AppName, "SmartInspectConsole", StringComparison.Ordinal) &&
+           string.Equals(entry.SessionName, "[MCP]", StringComparison.Ordinal);
 
     private bool MatchesTitle(string title)
     {
@@ -714,7 +735,7 @@ public class LogViewViewModel : ViewModelBase
 
         foreach (var entry in entries)
         {
-            sb.Append(entry.Timestamp.ToString("HH:mm:ss.fff"));
+            sb.Append(TimeFormatSettings.FormatShort(entry.Timestamp));
             sb.Append('\t');
             sb.Append(entry.ElapsedTimeFormatted);
             sb.Append('\t');

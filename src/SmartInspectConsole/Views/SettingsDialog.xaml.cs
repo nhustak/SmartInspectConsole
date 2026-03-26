@@ -15,8 +15,9 @@ public partial class SettingsDialog : Window
     public bool DebugMode { get; private set; }
     public int MaxLogEntries { get; private set; }
     public bool ConfirmBeforeClear { get; private set; }
+    public bool Use24HourTime { get; private set; }
 
-    public SettingsDialog(int currentPort, string currentPipeName, int currentWebSocketPort, bool debugMode, int maxLogEntries, bool confirmBeforeClear)
+    public SettingsDialog(int currentPort, string currentPipeName, int currentWebSocketPort, bool debugMode, int maxLogEntries, bool confirmBeforeClear, bool use24HourTime)
     {
         InitializeComponent();
         TcpPort = currentPort;
@@ -25,12 +26,14 @@ public partial class SettingsDialog : Window
         DebugMode = debugMode;
         MaxLogEntries = maxLogEntries;
         ConfirmBeforeClear = confirmBeforeClear;
+        Use24HourTime = use24HourTime;
         TcpPortTextBox.Text = currentPort.ToString();
         PipeNameTextBox.Text = currentPipeName;
         WebSocketPortTextBox.Text = currentWebSocketPort.ToString();
         DebugModeCheckBox.IsChecked = debugMode;
         MaxLogEntriesTextBox.Text = maxLogEntries.ToString("N0");
         ConfirmBeforeClearCheckBox.IsChecked = confirmBeforeClear;
+        Use24HourTimeCheckBox.IsChecked = use24HourTime;
     }
 
     private void OK_Click(object sender, RoutedEventArgs e)
@@ -87,6 +90,7 @@ public partial class SettingsDialog : Window
         WebSocketPort = wsPort;
         DebugMode = DebugModeCheckBox.IsChecked == true;
         ConfirmBeforeClear = ConfirmBeforeClearCheckBox.IsChecked == true;
+        Use24HourTime = Use24HourTimeCheckBox.IsChecked == true;
         MaxLogEntries = maxLog;
         DialogResult = true;
         Close();

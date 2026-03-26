@@ -6,7 +6,7 @@
         mc:Ignorable="d"
         Title="Settings"
         Icon="/Resources/smartinspectconsole.png"
-        Height="460" Width="420"
+        Height="520" Width="420"
         WindowStartupLocation="CenterOwner"
         ResizeMode="NoResize"
         ShowInTaskbar="False"
@@ -111,8 +111,13 @@
 
             <!-- Behavior -->
             <GroupBox Header="Behavior">
-                <CheckBox x:Name="ConfirmBeforeClearCheckBox" Content="Confirm before clearing log entries"
-                          Foreground="{DynamicResource ForegroundBrush}"/>
+                <StackPanel>
+                    <CheckBox x:Name="ConfirmBeforeClearCheckBox" Content="Confirm before clearing log entries"
+                              Foreground="{DynamicResource ForegroundBrush}"/>
+                    <CheckBox x:Name="Use24HourTimeCheckBox" Content="Use 24-hour time (disable for 12-hour AM/PM)"
+                              Margin="0,8,0,0"
+                              Foreground="{DynamicResource ForegroundBrush}"/>
+                </StackPanel>
             </GroupBox>
 
             <!-- Developer Settings -->

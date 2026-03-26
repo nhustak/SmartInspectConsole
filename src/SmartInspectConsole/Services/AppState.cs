@@ -37,6 +37,7 @@ public class AppState
 
     // Theme
     public bool IsDarkTheme { get; set; } = true;
+    public bool Use24HourTime { get; set; } = true;
 
     // Panel visibility
     public bool ShowWatchesPanel { get; set; } = true;
@@ -50,6 +51,7 @@ public class AppState
 
     // Developer settings
     public bool DebugMode { get; set; } = false;
+    public bool EnableMcpTrace { get; set; } = true;
 
     // Behavior
     public bool ConfirmBeforeClear { get; set; } = true;
@@ -64,6 +66,7 @@ public class AppState
 
     // Selected view index
     public int SelectedViewIndex { get; set; }
+    public string? SelectedViewName { get; set; }
 
     /// <summary>
     /// Loads state from the default location, or returns defaults if not found.

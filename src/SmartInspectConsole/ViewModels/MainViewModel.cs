@@ -28,6 +28,10 @@ namespace SmartInspectConsole.ViewModels;
 /// </summary>
 public class MainViewModel : ViewModelBase, IDisposable
 {
+    private const string AllViewName = "All";
+    private const string McpTraceViewName = "MCP Trace";
+    private const string McpTraceAppName = "SmartInspectConsole";
+    private const string McpTraceSessionName = "[MCP]";
     private SmartInspectTcpListener? _tcpListener;
     private SmartInspectPipeListener? _pipeListener;
     private SmartInspectWebSocketListener? _webSocketListener;
@@ -83,7 +87,9 @@ public class MainViewModel : ViewModelBase, IDisposable
     private string _pipeName = SmartInspectPipeListener.DefaultPipeName;
     private int _webSocketPort = SmartInspectWebSocketListener.DefaultPort;
     private bool _debugMode = false;
+    private bool _enableMcpTrace = true;
     private bool _confirmBeforeClear = true;
+    private bool _use24HourTime = true;
 
     public MainViewModel()
     {
@@ -110,9 +116,11 @@ public class MainViewModel : ViewModelBase, IDisposable
         BindingOperations.EnableCollectionSynchronization(ConnectedApplications, _logEntriesLock);
 
         // Create default "All" view (primary view that cannot be closed)
-        var allView = new LogViewViewModel(LogEntries, _logEntriesLock, "All", isPrimaryView: true);
+        var allView = CreateAllView();
         Views.Add(allView);
         SelectedView = allView;
+
+        EnsureMcpTraceViewState();
 
         // Initialize commands
         StartCommand = new AsyncRelayCommand(StartAsync, () => !IsListening);
@@ -161,6 +169,8 @@ public class MainViewModel : ViewModelBase, IDisposable
         };
         _batchTimer.Tick += ProcessPendingItems;
         _batchTimer.Start();
+
+        TimeFormatSettings.Use24HourTime = _use24HourTime;
     }
 
     #region Properties
@@ -351,6 +361,24 @@ public class MainViewModel : ViewModelBase, IDisposable
         get => _confirmBeforeClear;
         set => SetProperty(ref _confirmBeforeClear, value);
     }
+
+    public bool Use24HourTime
+    {
+        get => _use24HourTime;
+        set
+        {
+            if (!SetProperty(ref _use24HourTime, value))
+                return;
+
+            TimeFormatSettings.Use24HourTime = value;
+            OnPropertyChanged(nameof(ShortTimeDisplayFormat));
+            OnPropertyChanged(nameof(FullTimestampDisplayFormat));
+        }
+    }
+
+    public string ShortTimeDisplayFormat => TimeFormatSettings.ShortTimeFormat;
+
+    public string FullTimestampDisplayFormat => TimeFormatSettings.FullTimestampFormat;
 
     #endregion
 
@@ -598,6 +626,18 @@ public class MainViewModel : ViewModelBase, IDisposable
             {
                 editViewModel.SaveTo(view);
             }
+        }
+    }
+
+    public bool EnableMcpTrace
+    {
+        get => _enableMcpTrace;
+        set
+        {
+            if (!SetProperty(ref _enableMcpTrace, value))
+                return;
+
+            EnsureMcpTraceViewState();
         }
     }
 
@@ -1351,19 +1391,25 @@ public class MainViewModel : ViewModelBase, IDisposable
 
         // Developer settings
         state.DebugMode = DebugMode;
+        state.EnableMcpTrace = EnableMcpTrace;
 
         // Behavior
         state.ConfirmBeforeClear = ConfirmBeforeClear;
+        state.Use24HourTime = Use24HourTime;
 
         // Views
         state.Views.Clear();
         foreach (var view in Views)
         {
+            if (IsSpecialView(view))
+                continue;
+
             state.Views.Add(CaptureViewState(view));
         }
 
         // Selected view index
         state.SelectedViewIndex = SelectedView != null ? Views.IndexOf(SelectedView) : 0;
+        state.SelectedViewName = SelectedView?.Name;
     }
 
     /// <summary>
@@ -1390,31 +1436,139 @@ public class MainViewModel : ViewModelBase, IDisposable
 
         // Developer settings
         DebugMode = state.DebugMode;
+        EnableMcpTrace = state.EnableMcpTrace;
 
         // Behavior
         ConfirmBeforeClear = state.ConfirmBeforeClear;
+        Use24HourTime = state.Use24HourTime;
 
-        // Restore views if any saved
+        Views.Clear();
+        var allView = CreateAllView();
+        Views.Add(allView);
+        var mcpTraceView = EnableMcpTrace ? EnsureMcpTraceViewState() : null;
+
         if (state.Views.Count > 0)
         {
-            Views.Clear();
-            var isFirst = true;
+            var appliedAll = false;
             foreach (var viewState in state.Views)
             {
-                // First view is always the primary view that cannot be closed
-                var view = new LogViewViewModel(LogEntries, _logEntriesLock, viewState.Name, isPrimaryView: isFirst);
+                if (!appliedAll)
+                {
+                    ApplyViewState(allView, viewState);
+                    appliedAll = true;
+                    continue;
+                }
+
+                if (string.Equals(viewState.Name, McpTraceViewName, StringComparison.Ordinal))
+                {
+                    if (mcpTraceView != null)
+                        ApplyViewState(mcpTraceView, viewState);
+                    continue;
+                }
+
+                var view = new LogViewViewModel(LogEntries, _logEntriesLock, viewState.Name);
                 ApplyViewState(view, viewState);
                 Views.Add(view);
-                isFirst = false;
             }
-
-            // Restore selected view
-            var index = Math.Max(0, Math.Min(state.SelectedViewIndex, Views.Count - 1));
-            SelectedView = Views[index];
-
-            // Update view counter
-            _viewCounter = Views.Count;
         }
+
+        SelectedView = ResolveSelectedView(state.SelectedViewName, state.SelectedViewIndex);
+        _viewCounter = Views.Count;
+    }
+
+    public void LogMcpTrace(McpTraceEvent traceEvent)
+    {
+        if (!EnableMcpTrace)
+            return;
+
+        Application.Current.Dispatcher.BeginInvoke(() =>
+        {
+            var entry = new LogEntry
+            {
+                Timestamp = traceEvent.TimestampUtc.ToLocalTime(),
+                LogEntryType = traceEvent.IsError ? LogEntryType.Error : LogEntryType.Debug,
+                SessionName = McpTraceSessionName,
+                AppName = McpTraceAppName,
+                HostName = Environment.MachineName,
+                Title = traceEvent.Title,
+                Data = System.Text.Encoding.UTF8.GetBytes(traceEvent.Data),
+                ViewerId = ViewerId.Data,
+                ProcessId = Environment.ProcessId,
+                ThreadId = Environment.CurrentManagedThreadId,
+                Color = traceEvent.IsError
+                    ? System.Drawing.Color.FromArgb(255, 200, 80, 80)
+                    : System.Drawing.Color.FromArgb(255, 80, 140, 220)
+            };
+
+            _pendingLogEntries.Enqueue((entry, string.Empty));
+            StatusText = $"MCP: {traceEvent.Title}";
+        });
+    }
+
+    private LogViewViewModel CreateAllView()
+        => new(LogEntries, _logEntriesLock, AllViewName, isPrimaryView: true)
+        {
+            ExcludeMcpTraceEntries = true
+        };
+
+    private LogViewViewModel? FindMcpTraceView()
+        => Views.FirstOrDefault(v => string.Equals(v.Name, McpTraceViewName, StringComparison.Ordinal));
+
+    private LogViewViewModel? EnsureMcpTraceViewState()
+    {
+        var existingView = FindMcpTraceView();
+        if (EnableMcpTrace)
+        {
+            if (existingView != null)
+                return existingView;
+
+            var traceView = CreateMcpTraceView();
+            Views.Add(traceView);
+            return traceView;
+        }
+
+        if (existingView == null)
+            return null;
+
+        if (ReferenceEquals(SelectedView, existingView))
+            SelectedView = Views.FirstOrDefault(v => string.Equals(v.Name, AllViewName, StringComparison.Ordinal)) ?? Views.FirstOrDefault();
+
+        Views.Remove(existingView);
+        return null;
+    }
+
+    private LogViewViewModel CreateMcpTraceView()
+    {
+        var view = new LogViewViewModel(LogEntries, _logEntriesLock, McpTraceViewName, isPrimaryView: false)
+        {
+            AppNameFilter = McpTraceAppName,
+            SessionFilter = McpTraceSessionName,
+            ShowDebug = true,
+            ShowVerbose = true,
+            ShowMessage = true,
+            ShowWarning = true,
+            ShowError = true,
+            ShowFatal = true
+        };
+
+        return view;
+    }
+
+    private static bool IsSpecialView(LogViewViewModel view)
+        => string.Equals(view.Name, AllViewName, StringComparison.Ordinal) ||
+           string.Equals(view.Name, McpTraceViewName, StringComparison.Ordinal);
+
+    private LogViewViewModel ResolveSelectedView(string? selectedViewName, int selectedViewIndex)
+    {
+        if (!string.IsNullOrWhiteSpace(selectedViewName))
+        {
+            var namedView = Views.FirstOrDefault(v => string.Equals(v.Name, selectedViewName, StringComparison.Ordinal));
+            if (namedView != null)
+                return namedView;
+        }
+
+        var index = Math.Max(0, Math.Min(selectedViewIndex, Views.Count - 1));
+        return Views[index];
     }
 
     private static ViewState CaptureViewState(LogViewViewModel view)

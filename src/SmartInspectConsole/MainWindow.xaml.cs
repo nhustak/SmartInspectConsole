@@ -30,7 +30,7 @@ public partial class MainWindow : Window
     {
         InitializeComponent();
         _viewModel = new MainViewModel();
-        _localApiHost = new LocalApiHost(_viewModel.Backend);
+        _localApiHost = new LocalApiHost(_viewModel.Backend, _viewModel.LogMcpTrace);
         DataContext = _viewModel;
 
         // Restore full application state
@@ -115,7 +115,7 @@ public partial class MainWindow : Window
 
     private async void Settings_Click(object sender, RoutedEventArgs e)
     {
-        var dialog = new SettingsDialog(_viewModel.TcpPort, _viewModel.PipeName, _viewModel.WebSocketPort, _viewModel.DebugMode, _viewModel.MaxLogEntries, _viewModel.ConfirmBeforeClear)
+        var dialog = new SettingsDialog(_viewModel.TcpPort, _viewModel.PipeName, _viewModel.WebSocketPort, _viewModel.DebugMode, _viewModel.MaxLogEntries, _viewModel.ConfirmBeforeClear, _viewModel.Use24HourTime)
         {
             Owner = this
         };
@@ -130,6 +130,7 @@ public partial class MainWindow : Window
             _viewModel.DebugMode = dialog.DebugMode;
             _viewModel.MaxLogEntries = dialog.MaxLogEntries;
             _viewModel.ConfirmBeforeClear = dialog.ConfirmBeforeClear;
+            _viewModel.Use24HourTime = dialog.Use24HourTime;
 
             if (portChanged || pipeChanged || wsPortChanged)
             {

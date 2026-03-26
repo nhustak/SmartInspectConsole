@@ -29,6 +29,7 @@
         <conv:BoolToGridLengthConverter x:Key="BoolToGridLengthConverter"/>
         <conv:BoolToColumnWidthConverter x:Key="BoolToColumnWidthConverter"/>
         <conv:LogEntryToIsSeparatorConverter x:Key="LogEntryToIsSeparatorConverter"/>
+        <conv:DateTimeFormatMultiConverter x:Key="DateTimeFormatMultiConverter"/>
 
         <!-- Local styles that use DynamicResource for theme switching -->
         <Style TargetType="GroupBox">
@@ -233,6 +234,12 @@
             <MenuItem Header="_Tools">
                 <MenuItem Header="_Settings..." Click="Settings_Click">
                     <MenuItem.Icon><TextBlock Text="&#xE713;" FontFamily="Segoe Fluent Icons" FontSize="14"/></MenuItem.Icon>
+                </MenuItem>
+                <Separator/>
+                <MenuItem Header="Trace _MCP Calls"
+                          IsCheckable="True"
+                          IsChecked="{Binding EnableMcpTrace}">
+                    <MenuItem.Icon><TextBlock Text="&#xE7C1;" FontFamily="Segoe Fluent Icons" FontSize="14"/></MenuItem.Icon>
                 </MenuItem>
             </MenuItem>
             <MenuItem Header="_Help">
@@ -521,8 +528,20 @@
                                                 </GridViewColumn.CellTemplate>
                                             </GridViewColumn>
                                             <GridViewColumn Header="Time"
-                                                            Width="{Binding ShowTimeColumn, Converter={StaticResource BoolToColumnWidthConverter}, ConverterParameter=90}"
-                                                            DisplayMemberBinding="{Binding Timestamp, StringFormat=HH:mm:ss.fff}"/>
+                                                            Width="{Binding ShowTimeColumn, Converter={StaticResource BoolToColumnWidthConverter}, ConverterParameter=110}">
+                                                <GridViewColumn.CellTemplate>
+                                                    <DataTemplate>
+                                                        <TextBlock>
+                                                            <TextBlock.Text>
+                                                                <MultiBinding Converter="{StaticResource DateTimeFormatMultiConverter}">
+                                                                    <Binding Path="Timestamp"/>
+                                                                    <Binding Path="DataContext.ShortTimeDisplayFormat" Mode="OneWay" RelativeSource="{RelativeSource AncestorType=Window}"/>
+                                                                </MultiBinding>
+                                                            </TextBlock.Text>
+                                                        </TextBlock>
+                                                    </DataTemplate>
+                                                </GridViewColumn.CellTemplate>
+                                            </GridViewColumn>
                                             <GridViewColumn Header="Elapsed"
                                                             Width="{Binding ShowElapsedColumn, Converter={StaticResource BoolToColumnWidthConverter}, ConverterParameter=70}"
                                                             DisplayMemberBinding="{Binding ElapsedTimeFormatted}"/>
@@ -753,7 +772,20 @@
                                 <GridViewColumn Header="Name" Width="150" DisplayMemberBinding="{Binding Name}"/>
                                 <GridViewColumn Header="Value" Width="200" DisplayMemberBinding="{Binding Value}"/>
                                 <GridViewColumn Header="Type" Width="80" DisplayMemberBinding="{Binding WatchType}"/>
-                                <GridViewColumn Header="Time" Width="90" DisplayMemberBinding="{Binding Timestamp, StringFormat=HH:mm:ss.fff}"/>
+                                <GridViewColumn Header="Time" Width="110">
+                                    <GridViewColumn.CellTemplate>
+                                        <DataTemplate>
+                                            <TextBlock>
+                                                <TextBlock.Text>
+                                                    <MultiBinding Converter="{StaticResource DateTimeFormatMultiConverter}">
+                                                        <Binding Path="Timestamp"/>
+                                                        <Binding Path="DataContext.ShortTimeDisplayFormat" Mode="OneWay" RelativeSource="{RelativeSource AncestorType=Window}"/>
+                                                    </MultiBinding>
+                                                </TextBlock.Text>
+                                            </TextBlock>
+                                        </DataTemplate>
+                                    </GridViewColumn.CellTemplate>
+                                </GridViewColumn>
                             </GridView>
                         </ListView.View>
                     </ListView>
@@ -784,7 +816,20 @@
                                 <GridViewColumn Header="Type" Width="100" DisplayMemberBinding="{Binding ProcessFlowType}"/>
                                 <GridViewColumn Header="Title" Width="250" DisplayMemberBinding="{Binding Title}"/>
                                 <GridViewColumn Header="Thread" Width="60" DisplayMemberBinding="{Binding ThreadId}"/>
-                                <GridViewColumn Header="Time" Width="90" DisplayMemberBinding="{Binding Timestamp, StringFormat=HH:mm:ss.fff}"/>
+                                <GridViewColumn Header="Time" Width="110">
+                                    <GridViewColumn.CellTemplate>
+                                        <DataTemplate>
+                                            <TextBlock>
+                                                <TextBlock.Text>
+                                                    <MultiBinding Converter="{StaticResource DateTimeFormatMultiConverter}">
+                                                        <Binding Path="Timestamp"/>
+                                                        <Binding Path="DataContext.ShortTimeDisplayFormat" Mode="OneWay" RelativeSource="{RelativeSource AncestorType=Window}"/>
+                                                    </MultiBinding>
+                                                </TextBlock.Text>
+                                            </TextBlock>
+                                        </DataTemplate>
+                                    </GridViewColumn.CellTemplate>
+                                </GridViewColumn>
                             </GridView>
                         </ListView.View>
                     </ListView>
@@ -818,8 +863,14 @@
                                  Margin="0,0,0,12"/>
 
                         <TextBlock Text="Timestamp:" FontWeight="Bold" Margin="0,0,0,4"/>
-                        <TextBox Text="{Binding Timestamp, Mode=OneWay, StringFormat=yyyy-MM-dd HH:mm:ss.fff}"
-                                 IsReadOnly="True" Margin="0,0,0,12"/>
+                        <TextBox IsReadOnly="True" Margin="0,0,0,12">
+                            <TextBox.Text>
+                                <MultiBinding Converter="{StaticResource DateTimeFormatMultiConverter}">
+                                    <Binding Path="Timestamp" Mode="OneWay"/>
+                                    <Binding Path="DataContext.FullTimestampDisplayFormat" Mode="OneWay" RelativeSource="{RelativeSource AncestorType=Window}"/>
+                                </MultiBinding>
+                            </TextBox.Text>
+                        </TextBox>
 
                         <TextBlock Text="Type:" FontWeight="Bold" Margin="0,0,0,4"/>
                         <TextBox Text="{Binding LogEntryType, Mode=OneWay}" IsReadOnly="True"
