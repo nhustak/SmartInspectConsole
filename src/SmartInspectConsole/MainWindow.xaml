@@ -557,7 +557,9 @@
                                                     <DataTemplate>
                                                         <Grid>
                                                             <!-- Normal title text -->
-                                                            <TextBlock Text="{Binding Title}"
+                                                            <TextBlock Text="{Binding SingleLineTitle}"
+                                                                       TextWrapping="NoWrap"
+                                                                       TextTrimming="CharacterEllipsis"
                                                                        Visibility="{Binding LogEntryType, Converter={StaticResource LogEntryToIsSeparatorConverter}, ConverterParameter=invert}"/>
                                                             <!-- Separator line -->
                                                             <Grid Visibility="{Binding LogEntryType, Converter={StaticResource LogEntryToIsSeparatorConverter}}">
@@ -567,7 +569,13 @@
                                                                     <ColumnDefinition Width="*"/>
                                                                 </Grid.ColumnDefinitions>
                                                                 <Rectangle Grid.Column="0" Height="1" Fill="{DynamicResource BorderBrush}" VerticalAlignment="Center" Margin="0,0,8,0"/>
-                                                                <TextBlock Grid.Column="1" Text="{Binding Title}" Foreground="{DynamicResource ForegroundSecondaryBrush}" FontStyle="Italic" VerticalAlignment="Center"/>
+                                                                <TextBlock Grid.Column="1"
+                                                                           Text="{Binding SingleLineTitle}"
+                                                                           TextWrapping="NoWrap"
+                                                                           TextTrimming="CharacterEllipsis"
+                                                                           Foreground="{DynamicResource ForegroundSecondaryBrush}"
+                                                                           FontStyle="Italic"
+                                                                           VerticalAlignment="Center"/>
                                                                 <Rectangle Grid.Column="2" Height="1" Fill="{DynamicResource BorderBrush}" VerticalAlignment="Center" Margin="8,0,0,0"/>
                                                             </Grid>
                                                         </Grid>

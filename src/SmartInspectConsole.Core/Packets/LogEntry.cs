@@ -45,6 +45,24 @@ public class LogEntry : Packet
     public string Title { get; set; } = string.Empty;
 
     /// <summary>
+    /// Gets the title normalized to a single display line for list views.
+    /// </summary>
+    public string SingleLineTitle
+    {
+        get
+        {
+            if (string.IsNullOrEmpty(Title))
+                return string.Empty;
+
+            return Title
+                .Replace("\r\n", " ", StringComparison.Ordinal)
+                .Replace('\r', ' ')
+                .Replace('\n', ' ')
+                .Replace('\t', ' ');
+        }
+    }
+
+    /// <summary>
     /// Gets or sets the host name.
     /// </summary>
     public string HostName { get; set; } = string.Empty;
