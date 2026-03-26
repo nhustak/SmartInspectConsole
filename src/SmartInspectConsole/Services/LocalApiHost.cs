@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.Json;
 using Microsoft.Extensions.DependencyInjection;
+using ModelContextProtocol.AspNetCore;
 using SmartInspectConsole.Backend;
 using SmartInspectConsole.Contracts;
 
@@ -41,6 +42,11 @@ public sealed class LocalApiHost : IAsyncDisposable
             options.SerializerOptions.WriteIndented = true;
         });
         builder.Services.AddSingleton(_backend);
+        builder.Services.AddSingleton<SmartInspectMcpTools>();
+        builder.Services
+            .AddMcpServer()
+            .WithHttpTransport()
+            .WithTools<SmartInspectMcpTools>();
 
         var app = builder.Build();
 
@@ -81,6 +87,8 @@ public sealed class LocalApiHost : IAsyncDisposable
 
         app.MapDelete("/api/local/v1/flags/{entryId}", (string entryId) =>
             _backend.UnflagEntry(entryId) ? Results.NoContent() : Results.NotFound());
+
+        app.MapMcp("/mcp");
 
         _app = app;
         await _app.StartAsync(cancellationToken);
