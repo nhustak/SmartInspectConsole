@@ -51,7 +51,7 @@ public class AppState
 
     // Developer settings
     public bool DebugMode { get; set; } = false;
-    public bool EnableMcpTrace { get; set; } = true;
+    public bool EnableMcpTrace { get; set; } = false;
 
     // Behavior
     public bool ConfirmBeforeClear { get; set; } = true;

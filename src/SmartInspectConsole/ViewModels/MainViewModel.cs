@@ -87,7 +87,7 @@ public class MainViewModel : ViewModelBase, IDisposable
     private string _pipeName = SmartInspectPipeListener.DefaultPipeName;
     private int _webSocketPort = SmartInspectWebSocketListener.DefaultPort;
     private bool _debugMode = false;
-    private bool _enableMcpTrace = true;
+    private bool _enableMcpTrace = false;
     private bool _confirmBeforeClear = true;
     private bool _use24HourTime = true;
 
@@ -564,6 +564,12 @@ public class MainViewModel : ViewModelBase, IDisposable
             MessageBoxImage.Question);
 
         if (result != MessageBoxResult.Yes) return;
+
+        if (string.Equals(view.Name, McpTraceViewName, StringComparison.Ordinal))
+        {
+            EnableMcpTrace = false;
+            return;
+        }
 
         var index = Views.IndexOf(view);
         Views.Remove(view);
