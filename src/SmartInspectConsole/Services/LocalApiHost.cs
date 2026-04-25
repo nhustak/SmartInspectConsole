@@ -7,6 +7,7 @@ using ModelContextProtocol.AspNetCore;
 using ModelContextProtocol.Protocol;
 using System.Diagnostics;
 using System.IO;
+using System.Net.Mime;
 using System.Text;
 using System.Text.Json;
 using SmartInspectConsole.Backend;
@@ -100,6 +101,30 @@ public sealed class LocalApiHost : IAsyncDisposable
             status = "healthy",
             runId = _backend.RunId
         }));
+
+        app.MapMethods("/mcp", [HttpMethods.Get], (HttpContext context) =>
+        {
+            context.Response.Headers.Allow = "POST";
+            return Results.StatusCode(StatusCodes.Status405MethodNotAllowed);
+        });
+
+        app.MapGet("/.well-known/oauth-authorization-server", () =>
+        {
+            var authority = new Uri(BaseUrl);
+            var root = authority.GetLeftPart(UriPartial.Authority);
+
+            return Results.Json(new
+            {
+                issuer = root,
+                authorization_endpoint = $"{root}/authorize",
+                token_endpoint = $"{root}/token",
+                registration_endpoint = $"{root}/register",
+                response_types_supported = new[] { "code" },
+                grant_types_supported = new[] { "authorization_code", "refresh_token" },
+                token_endpoint_auth_methods_supported = new[] { "none" },
+                code_challenge_methods_supported = new[] { "S256" }
+            }, contentType: MediaTypeNames.Application.Json);
+        });
 
         app.MapGet("/api/local/v1/applications", (bool? connectedOnly, bool? mutedOnly) =>
             Results.Ok(_backend.ListApplications(connectedOnly ?? false, mutedOnly ?? false)));
