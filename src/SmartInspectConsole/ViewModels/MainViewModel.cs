@@ -50,6 +50,7 @@ public class MainViewModel : ViewModelBase, IDisposable
     private const int ImmediateDrainThreshold = 2000;
     private const int MediumBacklogThreshold = 10000;
     private const int HighBacklogThreshold = 50000;
+    private const int MaxPendingLogEntries = 100000;
     private const double TrimTargetRetentionRatio = 0.90;
 
     private DateTime? _lastLogEntryTimestamp;
@@ -77,10 +78,12 @@ public class MainViewModel : ViewModelBase, IDisposable
     private bool _immediateDrainScheduled;
     private long _totalLogEntriesReceived;
     private long _totalLogEntriesRendered;
+    private long _totalLogEntriesDroppedFromPendingQueue;
     private long _totalWatchUpdatesRendered;
     private long _totalProcessFlowsRendered;
     private int _maxObservedLogQueueDepth;
     private BatchDiagnosticsSnapshot _diagnosticsSnapshot = new();
+    private readonly object _pendingLogEntriesLock = new();
 
     // Network settings
     private int _tcpPort = SmartInspectTcpListener.DefaultPort;
@@ -746,7 +749,7 @@ public class MainViewModel : ViewModelBase, IDisposable
         switch (e.Packet)
         {
             case LogEntry logEntry:
-                _pendingLogEntries.Enqueue((logEntry, e.ClientId));
+                EnqueuePendingLogEntry(logEntry, e.ClientId);
                 Interlocked.Increment(ref _totalLogEntriesReceived);
                 UpdateQueueHighWaterMark(_pendingLogEntries.Count);
                 UpdateBackendQueueDepth();
@@ -789,6 +792,7 @@ public class MainViewModel : ViewModelBase, IDisposable
         var newSessions = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var newHostNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var maxBatchSize = GetAdaptiveBatchSize();
+        var logEntriesToAdd = new List<LogEntry>(maxBatchSize);
 
         try
         {
@@ -814,15 +818,30 @@ public class MainViewModel : ViewModelBase, IDisposable
                 }
                 _lastLogEntryTimestamp = logEntry.Timestamp;
 
-                lock (_logEntriesLock)
-                {
-                    LogEntries.Add(logEntry);
-                }
+                logEntriesToAdd.Add(logEntry);
 
                 _backend.AppendLogEntry(logEntry, pending.ClientId);
                 TrackAvailableFilterValues(logEntry, newAppNames, newSessions, newHostNames);
                 logEntriesProcessed++;
                 logEntriesAdded++;
+            }
+
+            if (logEntriesToAdd.Count > 0)
+            {
+                lock (_logEntriesLock)
+                {
+                    if (LogEntries is BulkObservableCollection<LogEntry> bulkLogEntries)
+                    {
+                        bulkLogEntries.AddRange(logEntriesToAdd);
+                    }
+                    else
+                    {
+                        foreach (var logEntry in logEntriesToAdd)
+                        {
+                            LogEntries.Add(logEntry);
+                        }
+                    }
+                }
             }
 
             ApplyConnectionUpdates(connectionUpdates);
@@ -1900,11 +1919,26 @@ public class MainViewModel : ViewModelBase, IDisposable
             LastBatchDurationMs = lastBatchDurationMs,
             TotalLogEntriesReceived = Interlocked.Read(ref _totalLogEntriesReceived),
             TotalLogEntriesRendered = Interlocked.Read(ref _totalLogEntriesRendered),
+            TotalLogEntriesDroppedFromPendingQueue = Interlocked.Read(ref _totalLogEntriesDroppedFromPendingQueue),
             TotalWatchUpdatesRendered = Interlocked.Read(ref _totalWatchUpdatesRendered),
             TotalProcessFlowsRendered = Interlocked.Read(ref _totalProcessFlowsRendered),
             MaxObservedLogQueueDepth = _maxObservedLogQueueDepth
         };
         DiagnosticsText = DiagnosticsSnapshot.ToString();
+    }
+
+    private void EnqueuePendingLogEntry(LogEntry logEntry, string clientId)
+    {
+        lock (_pendingLogEntriesLock)
+        {
+            while (_pendingLogEntries.Count >= MaxPendingLogEntries &&
+                   _pendingLogEntries.TryDequeue(out _))
+            {
+                Interlocked.Increment(ref _totalLogEntriesDroppedFromPendingQueue);
+            }
+
+            _pendingLogEntries.Enqueue((logEntry, clientId));
+        }
     }
 
     private void UpdateBackendQueueDepth()

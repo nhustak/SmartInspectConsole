@@ -60,9 +60,10 @@ public class SmartInspectWebSocketListener : IPacketListener
         }
         catch (HttpListenerException ex) when (ex.ErrorCode == 5) // Access denied
         {
-            // Try localhost only if we can't bind to all interfaces
+            // Fall back to explicit loopback bindings when wildcard URL ACLs are unavailable.
             _httpListener = new HttpListener();
             _httpListener.Prefixes.Add($"http://localhost:{_port}/");
+            _httpListener.Prefixes.Add($"http://127.0.0.1:{_port}/");
             _httpListener.Start();
         }
 

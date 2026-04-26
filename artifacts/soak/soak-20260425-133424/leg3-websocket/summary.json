@@ -1,0 +1,10 @@
+{
+    "leg":  "leg3-websocket",
+    "success":  true,
+    "durationSeconds":  5,
+    "localQueueDrainThreshold":  50,
+    "drainSeconds":  2,
+    "finalQueueDepth":  0,
+    "finalTotalReceived":  10486,
+    "finalTotalDroppedByRetention":  0
+}

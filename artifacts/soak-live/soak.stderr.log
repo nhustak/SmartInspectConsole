@@ -1,0 +1,10 @@
+C:\Project\Utility\SmartInspectConsole\tools\soak\run-soak.ps1 : Soak run failed: leg2-pipe: pipe exited with code 1.; 
+leg3-websocket: The property 'queueDepth' cannot be found on this object. Verify that the property exists.; 
+leg4-relay: The property 'queueDepth' cannot be found on this object. Verify that the property exists.; leg5-mixed: 
+The property 'queueDepth' cannot be found on this object. Verify that the property exists.
+At C:\Project\Utility\SmartInspectConsole\tools\soak\run-soak.ps1:614 char:5
++     Write-Error ("Soak run failed: " + ($global:FailureReasons -join  ...
++     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (:) [Write-Error], WriteErrorException
+    + FullyQualifiedErrorId : Microsoft.PowerShell.Commands.WriteErrorException,run-soak.ps1
+ 

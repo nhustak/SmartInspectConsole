@@ -293,6 +293,20 @@ You can also launch a default TCP load test from the desktop app:
 
 That starts the existing load tester in a visible PowerShell window against the app's current TCP port.
 
+## Soak Harness
+
+For full-stack long-running validation, use the soak harness at `tools/soak/run-soak.ps1`.
+
+It exercises:
+
+- direct TCP traffic
+- direct named-pipe traffic
+- direct browser/WebSocket traffic via `smartinspect-js`
+- standalone relay HTTP traffic forwarded to the desktop app over WebSocket
+- a final mixed-traffic leg across all paths
+
+See [docs/soak-test.md](C:\Project\Utility\SmartInspectConsole\docs\soak-test.md) for the run shape, output files, and override options.
+
 ## Current Caveats
 
 - The Connections panel only shows clients once they are identified by client metadata such as `LogHeader`. Raw transport counts can be higher than the visible identified connection list.

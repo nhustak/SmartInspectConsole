@@ -1,0 +1,22 @@
+{
+    "runName":  "soak-20260425-133608",
+    "startedAtUtc":  "2026-04-25T17:36:08.8801791Z",
+    "outputRoot":  "C:\\Project\\Utility\\SmartInspectConsole\\artifacts\\soak\\soak-20260425-133608",
+    "success":  false,
+    "failureReasons":  [
+                           "leg2-pipe: pipe exited with code 1.",
+                           "leg3-websocket: The property \u0027queueDepth\u0027 cannot be found on this object. Verify that the property exists.",
+                           "leg4-relay: The property \u0027queueDepth\u0027 cannot be found on this object. Verify that the property exists.",
+                           "leg5-mixed: The property \u0027queueDepth\u0027 cannot be found on this object. Verify that the property exists."
+                       ],
+    "durationSecondsPerLeg":  7200,
+    "sampleIntervalSeconds":  60,
+    "drainSeconds":  30,
+    "legs":  [
+                 "leg1-tcp",
+                 "leg2-pipe",
+                 "leg3-websocket",
+                 "leg4-relay",
+                 "leg5-mixed"
+             ]
+}

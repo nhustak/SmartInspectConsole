@@ -1,0 +1,13 @@
+{
+    "runName":  "soak-20260425-133424",
+    "startedAtUtc":  "2026-04-25T17:34:24.7539554Z",
+    "outputRoot":  "C:\\Project\\Utility\\SmartInspectConsole\\artifacts\\soak\\soak-20260425-133424",
+    "success":  true,
+    "failureReasons":  [
+
+                       ],
+    "durationSecondsPerLeg":  5,
+    "sampleIntervalSeconds":  1,
+    "drainSeconds":  2,
+    "legs":  "leg3-websocket"
+}

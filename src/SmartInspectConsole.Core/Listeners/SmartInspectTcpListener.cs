@@ -137,16 +137,17 @@ public class SmartInspectTcpListener : IPacketListener
                 if (bytesRead < size)
                     break; // Connection closed
 
+                // Acknowledge receipt immediately so client logging calls are not blocked on
+                // packet parsing or downstream UI processing.
+                await stream.WriteAsync(Acknowledgment, cancellationToken);
+                await stream.FlushAsync(cancellationToken);
+
                 // Parse packet
                 var packet = _packetReader.ParsePacket(packetType, payload);
                 if (packet != null)
                 {
                     OnPacketReceived(new PacketReceivedEventArgs(packet, clientId));
                 }
-
-                // Send acknowledgment
-                await stream.WriteAsync(Acknowledgment, cancellationToken);
-                await stream.FlushAsync(cancellationToken);
             }
         }
         catch (OperationCanceledException)

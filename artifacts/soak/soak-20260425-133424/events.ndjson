@@ -1,0 +1,10 @@
+{"timestampUtc":"2026-04-25T17:34:24.7986130Z","leg":"leg3-websocket","phase":"start","requiresRelay":false,"durationSeconds":5,"sampleIntervalSeconds":1,"processCount":1}
+{"timestampUtc":"2026-04-25T17:34:24.8873701Z","leg":"leg3-websocket","phase":"pre","totalReceived":498,"queueDepth":0,"totalDroppedByRetention":0}
+{"timestampUtc":"2026-04-25T17:34:24.9282233Z","leg":"leg3-websocket","phase":"process-start","filePath":"node","arguments":"--no-warnings=MODULE_TYPELESS_PACKAGE_JSON C:\\Project\\Utility\\SmartInspectConsole\\tools\\soak\\traffic-driver.mjs --transport websocket --url ws://127.0.0.1:4229 --sessions 4 --messages-per-second 500 --payload-bytes 1024 --duration-seconds 5 --timeout-seconds 30 --watches-every 100 --flows-every 200 --app-prefix SoakWebSocket --session-prefix websocket","process":"websocket"}
+{"timestampUtc":"2026-04-25T17:34:25.9477132Z","leg":"leg3-websocket","phase":"sample","totalReceived":2250,"queueDepth":124,"totalDroppedByRetention":0}
+{"timestampUtc":"2026-04-25T17:34:26.9605340Z","leg":"leg3-websocket","phase":"sample","totalReceived":4398,"queueDepth":32,"totalDroppedByRetention":0}
+{"timestampUtc":"2026-04-25T17:34:27.9794070Z","leg":"leg3-websocket","phase":"sample","totalReceived":6374,"queueDepth":88,"totalDroppedByRetention":0}
+{"timestampUtc":"2026-04-25T17:34:28.9945330Z","leg":"leg3-websocket","phase":"sample","totalReceived":8406,"queueDepth":60,"totalDroppedByRetention":0}
+{"timestampUtc":"2026-04-25T17:34:30.0019924Z","leg":"leg3-websocket","phase":"sample","totalReceived":10394,"queueDepth":92,"totalDroppedByRetention":0}
+{"timestampUtc":"2026-04-25T17:34:30.0215163Z","leg":"leg3-websocket","phase":"post","totalReceived":10486,"queueDepth":0,"totalDroppedByRetention":0}
+{"timestampUtc":"2026-04-25T17:34:32.0371036Z","leg":"leg3-websocket","phase":"complete","success":true,"drainSeconds":2,"finalTotalReceived":10486,"durationSeconds":5,"finalQueueDepth":0,"finalTotalDroppedByRetention":0,"localQueueDrainThreshold":50}

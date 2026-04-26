@@ -1,0 +1,10 @@
+{
+    "leg":  "leg1-tcp",
+    "success":  true,
+    "durationSeconds":  7200,
+    "localQueueDrainThreshold":  50,
+    "drainSeconds":  30,
+    "finalQueueDepth":  0,
+    "finalTotalReceived":  55918760,
+    "finalTotalDroppedByRetention":  13498961
+}

@@ -9,6 +9,28 @@ namespace SmartInspectConsole.Collections;
 /// </summary>
 public class BulkObservableCollection<T> : ObservableCollection<T>
 {
+    public void AddRange(IEnumerable<T> items)
+    {
+        ArgumentNullException.ThrowIfNull(items);
+
+        var addedAny = false;
+
+        CheckReentrancy();
+
+        foreach (var item in items)
+        {
+            Items.Add(item);
+            addedAny = true;
+        }
+
+        if (!addedAny)
+            return;
+
+        OnPropertyChanged(new PropertyChangedEventArgs(nameof(Count)));
+        OnPropertyChanged(new PropertyChangedEventArgs("Item[]"));
+        OnCollectionChanged(new NotifyCollectionChangedEventArgs(NotifyCollectionChangedAction.Reset));
+    }
+
     public void RemoveFirstRange(int count)
     {
         if (count <= 0 || Count == 0)

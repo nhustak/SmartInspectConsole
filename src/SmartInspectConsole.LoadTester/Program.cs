@@ -56,8 +56,16 @@ internal static class Program
     {
         LoadTestConnection connection = options.Transport switch
         {
-            TransportKind.Tcp => await TcpLoadTestConnection.ConnectAsync(options, clientNumber, cancellationToken),
-            TransportKind.Pipe => await PipeLoadTestConnection.ConnectAsync(options, clientNumber, cancellationToken),
+            TransportKind.Tcp => await ExecuteWithTimeoutAsync(
+                token => TcpLoadTestConnection.ConnectAsync(options, clientNumber, token),
+                options.ConnectTimeout,
+                $"tcp connect client {clientNumber}",
+                cancellationToken),
+            TransportKind.Pipe => await ExecuteWithTimeoutAsync(
+                token => PipeLoadTestConnection.ConnectAsync(options, clientNumber, token),
+                options.ConnectTimeout,
+                $"pipe connect client {clientNumber}",
+                cancellationToken),
             _ => throw new InvalidOperationException($"Unsupported transport: {options.Transport}")
         };
 
@@ -76,10 +84,14 @@ internal static class Program
             double tokens = 0;
             var lastRefill = stopwatch.Elapsed;
 
-            await connection.SendPacketAsync(writer, new LogHeader
-            {
-                Content = $"appname={appName}\r\nhostname={hostname}\r\n"
-            }, cancellationToken);
+            await ExecuteWithTimeoutAsync(
+                token => connection.SendPacketAsync(writer, new LogHeader
+                {
+                    Content = $"appname={appName}\r\nhostname={hostname}\r\n"
+                }, token),
+                options.OperationTimeout,
+                $"send log header client {clientNumber}",
+                cancellationToken);
 
             while (!cancellationToken.IsCancellationRequested)
             {
@@ -111,33 +123,45 @@ internal static class Program
                     Color = PickColor(entryType)
                 };
 
-                await connection.SendPacketAsync(writer, packet, cancellationToken);
+                await ExecuteWithTimeoutAsync(
+                    token => connection.SendPacketAsync(writer, packet, token),
+                    options.OperationTimeout,
+                    $"send log packet client {clientNumber}",
+                    cancellationToken);
                 stats.RecordLog(payload.Length);
 
                 if (sentLogs >= nextWatchAt)
                 {
-                    await connection.SendPacketAsync(writer, new Watch
-                    {
-                        Name = $"{sessionName}.Rate",
-                        Value = $"{sentLogs:N0}",
-                        WatchType = WatchType.String,
-                        Timestamp = DateTime.Now
-                    }, cancellationToken);
+                    await ExecuteWithTimeoutAsync(
+                        token => connection.SendPacketAsync(writer, new Watch
+                        {
+                            Name = $"{sessionName}.Rate",
+                            Value = $"{sentLogs:N0}",
+                            WatchType = WatchType.String,
+                            Timestamp = DateTime.Now
+                        }, token),
+                        options.OperationTimeout,
+                        $"send watch packet client {clientNumber}",
+                        cancellationToken);
                     stats.RecordWatch();
                     nextWatchAt += options.WatchesEvery;
                 }
 
                 if (sentLogs >= nextProcessFlowAt)
                 {
-                    await connection.SendPacketAsync(writer, new ProcessFlow
-                    {
-                        ProcessFlowType = sentLogs % 2 == 0 ? ProcessFlowType.EnterMethod : ProcessFlowType.LeaveMethod,
-                        Title = $"Worker{clientNumber}.Tick{random.Next(1, 500)}",
-                        HostName = hostname,
-                        ProcessId = Environment.ProcessId,
-                        ThreadId = Environment.CurrentManagedThreadId,
-                        Timestamp = DateTime.Now
-                    }, cancellationToken);
+                    await ExecuteWithTimeoutAsync(
+                        token => connection.SendPacketAsync(writer, new ProcessFlow
+                        {
+                            ProcessFlowType = sentLogs % 2 == 0 ? ProcessFlowType.EnterMethod : ProcessFlowType.LeaveMethod,
+                            Title = $"Worker{clientNumber}.Tick{random.Next(1, 500)}",
+                            HostName = hostname,
+                            ProcessId = Environment.ProcessId,
+                            ThreadId = Environment.CurrentManagedThreadId,
+                            Timestamp = DateTime.Now
+                        }, token),
+                        options.OperationTimeout,
+                        $"send process flow packet client {clientNumber}",
+                        cancellationToken);
                     stats.RecordProcessFlow();
                     nextProcessFlowAt += options.ProcessFlowsEvery;
                 }
@@ -156,6 +180,53 @@ internal static class Program
 
         tokens = Math.Min(options.MessagesPerSecond, tokens + elapsed.TotalSeconds * options.MessagesPerSecond);
         lastRefill = now;
+    }
+
+    private static async Task<T> ExecuteWithTimeoutAsync<T>(
+        Func<CancellationToken, Task<T>> operation,
+        TimeSpan timeout,
+        string operationName,
+        CancellationToken cancellationToken)
+    {
+        if (timeout == Timeout.InfiniteTimeSpan)
+            return await operation(cancellationToken);
+
+        using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        timeoutCts.CancelAfter(timeout);
+
+        try
+        {
+            return await operation(timeoutCts.Token);
+        }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested && timeoutCts.IsCancellationRequested)
+        {
+            throw new TimeoutException($"{operationName} timed out after {timeout.TotalSeconds:F0}s.");
+        }
+    }
+
+    private static async Task ExecuteWithTimeoutAsync(
+        Func<CancellationToken, Task> operation,
+        TimeSpan timeout,
+        string operationName,
+        CancellationToken cancellationToken)
+    {
+        if (timeout == Timeout.InfiniteTimeSpan)
+        {
+            await operation(cancellationToken);
+            return;
+        }
+
+        using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        timeoutCts.CancelAfter(timeout);
+
+        try
+        {
+            await operation(timeoutCts.Token);
+        }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested && timeoutCts.IsCancellationRequested)
+        {
+            throw new TimeoutException($"{operationName} timed out after {timeout.TotalSeconds:F0}s.");
+        }
     }
 
     private static async Task ReportProgressAsync(LoadTestStats stats, LoadTestOptions options, CancellationToken cancellationToken)
@@ -231,6 +302,10 @@ internal sealed class LoadTestOptions
           --messages-per-second <n>   Per-client log rate. 0 = unthrottled. Default: 1000
           --payload-bytes <n>         Approximate bytes in each log payload. Default: 512
           --duration-seconds <n>      Test duration in seconds. Default: 300
+          --connect-timeout-seconds <n>
+                                      Maximum time to allow each client connection. 0 = infinite. Default: 15
+          --operation-timeout-seconds <n>
+                                      Maximum time to allow each send/ack operation. 0 = infinite. Default: 15
           --watches-every <n>         Send a watch packet every N log entries. Default: 100
           --flows-every <n>           Send a process flow packet every N log entries. Default: 200
           --app-prefix <text>         App name prefix. Default: LoadTestApp
@@ -250,6 +325,8 @@ internal sealed class LoadTestOptions
     public int MessagesPerSecond { get; init; } = 1000;
     public int PayloadBytes { get; init; } = 512;
     public TimeSpan Duration { get; init; } = TimeSpan.FromMinutes(5);
+    public TimeSpan ConnectTimeout { get; init; } = TimeSpan.FromSeconds(15);
+    public TimeSpan OperationTimeout { get; init; } = TimeSpan.FromSeconds(15);
     public int WatchesEvery { get; init; } = 100;
     public int ProcessFlowsEvery { get; init; } = 200;
     public string AppNamePrefix { get; init; } = "LoadTestApp";
@@ -289,6 +366,8 @@ internal sealed class LoadTestOptions
             MessagesPerSecond = ParseInt(GetValue(values, "messages-per-second", "1000"), "messages-per-second", 0),
             PayloadBytes = ParseInt(GetValue(values, "payload-bytes", "512"), "payload-bytes", 0),
             Duration = TimeSpan.FromSeconds(ParseInt(GetValue(values, "duration-seconds", "300"), "duration-seconds", 1)),
+            ConnectTimeout = ParseTimeoutSeconds(GetValue(values, "connect-timeout-seconds", "15"), "connect-timeout-seconds"),
+            OperationTimeout = ParseTimeoutSeconds(GetValue(values, "operation-timeout-seconds", "15"), "operation-timeout-seconds"),
             WatchesEvery = ParseInt(GetValue(values, "watches-every", "100"), "watches-every", 0),
             ProcessFlowsEvery = ParseInt(GetValue(values, "flows-every", "200"), "flows-every", 0),
             AppNamePrefix = GetValue(values, "app-prefix", "LoadTestApp"),
@@ -305,6 +384,12 @@ internal sealed class LoadTestOptions
             throw new ArgumentOutOfRangeException(argumentName, $"Expected {argumentName} to be an integer >= {minValue}.");
 
         return value;
+    }
+
+    private static TimeSpan ParseTimeoutSeconds(string rawValue, string argumentName)
+    {
+        var seconds = ParseInt(rawValue, argumentName, 0);
+        return seconds == 0 ? Timeout.InfiniteTimeSpan : TimeSpan.FromSeconds(seconds);
     }
 
     private static TransportKind ParseTransport(string value)
