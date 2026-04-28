@@ -35,6 +35,8 @@ nul
 
 # Publish output
 publish/
+SmartInspectConsole-SetupFiles/
+SmartInspectConsole-cache/
 
 # Node.js (smartinspect-js)
 node_modules/
