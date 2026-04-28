@@ -682,6 +682,7 @@
                     </GroupBox.ContextMenu>
                     <ListView ItemsSource="{Binding ConnectedApplications}"
                               VirtualizingPanel.IsVirtualizing="True"
+                              MouseDoubleClick="ConnectionsListView_MouseDoubleClick"
                               x:Name="ConnectionsListView">
                         <ListView.ItemContainerStyle>
                             <Style TargetType="ListViewItem" BasedOn="{StaticResource {x:Type ListViewItem}}">

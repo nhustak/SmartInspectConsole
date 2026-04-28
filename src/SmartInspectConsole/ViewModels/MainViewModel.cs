@@ -152,6 +152,7 @@ public class MainViewModel : ViewModelBase, IDisposable
         MuteAllCommand = new RelayCommand(MuteAll);
         UnmuteAllCommand = new RelayCommand(UnmuteAll);
         RemoveConnectionCommand = new RelayCommand<ConnectedApplication>(RemoveConnection);
+        OpenApplicationViewCommand = new RelayCommand<ConnectedApplication>(OpenApplicationView);
 
         // File I/O commands
         OpenLogFileCommand = new AsyncRelayCommand(OpenLogFileAsync);
@@ -418,6 +419,7 @@ public class MainViewModel : ViewModelBase, IDisposable
     public ICommand MuteAllCommand { get; }
     public ICommand UnmuteAllCommand { get; }
     public ICommand RemoveConnectionCommand { get; }
+    public ICommand OpenApplicationViewCommand { get; }
 
     // Detail tabs
     public ICommand OpenLogEntryDetailCommand { get; }
@@ -603,6 +605,37 @@ public class MainViewModel : ViewModelBase, IDisposable
             TextFilter = view.TextFilter,
             SelectedLogLevel = view.SelectedLogLevel
         };
+        Views.Add(newView);
+        SelectedView = newView;
+    }
+
+    private void OpenApplicationView(ConnectedApplication? app)
+    {
+        if (app == null || string.IsNullOrWhiteSpace(app.AppName))
+            return;
+
+        var appName = app.AppName.Trim();
+        var existingView = Views.FirstOrDefault(view =>
+            !view.IsPrimaryView &&
+            string.Equals(view.AppNameFilter, appName, StringComparison.OrdinalIgnoreCase) &&
+            string.IsNullOrWhiteSpace(view.SessionFilter) &&
+            string.IsNullOrWhiteSpace(view.HostnameFilter) &&
+            string.IsNullOrWhiteSpace(view.ProcessIdFilter) &&
+            string.IsNullOrWhiteSpace(view.ThreadIdFilter) &&
+            string.IsNullOrWhiteSpace(view.TextFilter) &&
+            !view.EnableTitleMatching);
+
+        if (existingView != null)
+        {
+            SelectedView = existingView;
+            return;
+        }
+
+        var newView = new LogViewViewModel(LogEntries, _logEntriesLock, appName)
+        {
+            AppNameFilter = appName
+        };
+
         Views.Add(newView);
         SelectedView = newView;
     }
@@ -1159,19 +1192,57 @@ public class MainViewModel : ViewModelBase, IDisposable
                     }
 
                     connection.MessageCount += update.MessageCount;
+                    connection.IsConnected = true;
+                }
+                else
+                {
+                    UpsertConnectionFromLogEntry(update);
                 }
 
                 continue;
             }
 
-            foreach (var fallbackConnection in ConnectedApplications)
+            UpsertConnectionFromLogEntry(update);
+        }
+    }
+
+    private void UpsertConnectionFromLogEntry(PendingConnectionUpdate update)
+    {
+        if (string.IsNullOrWhiteSpace(update.AppName))
+            return;
+
+        var appName = update.AppName;
+        var hostName = string.IsNullOrWhiteSpace(update.HostName) ? "Unknown" : update.HostName;
+        var muteKey = $"{appName}@{hostName}";
+
+        var connection = ConnectedApplications.FirstOrDefault(c =>
+            string.Equals(c.AppName, appName, StringComparison.OrdinalIgnoreCase) &&
+            string.Equals(c.HostName, hostName, StringComparison.OrdinalIgnoreCase));
+
+        if (connection == null)
+        {
+            connection = new ConnectedApplication
             {
-                if (fallbackConnection.AppName == update.AppName && fallbackConnection.HostName == update.HostName)
-                {
-                    fallbackConnection.MessageCount += update.MessageCount;
-                    break;
-                }
-            }
+                ClientId = update.ClientId,
+                AppName = appName,
+                HostName = hostName,
+                IsConnected = !string.IsNullOrWhiteSpace(update.ClientId),
+                IsMuted = _mutedApps.Contains(muteKey)
+            };
+            connection.PropertyChanged += OnConnectionPropertyChanged;
+            ConnectedApplications.Add(connection);
+        }
+        else if (!string.IsNullOrWhiteSpace(update.ClientId) &&
+                 string.IsNullOrWhiteSpace(connection.ClientId))
+        {
+            connection.ClientId = update.ClientId;
+        }
+
+        connection.MessageCount += update.MessageCount;
+        if (!string.IsNullOrWhiteSpace(update.ClientId))
+        {
+            connection.IsConnected = true;
+            _connectionsByClientId[update.ClientId] = connection;
         }
     }
 

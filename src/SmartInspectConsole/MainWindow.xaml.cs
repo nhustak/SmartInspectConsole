@@ -7,6 +7,7 @@ using Microsoft.Win32;
 using SmartInspectConsole.Backend;
 using SmartInspectConsole.Core.Packets;
 using SmartInspectConsole.Helpers;
+using SmartInspectConsole.Models;
 using SmartInspectConsole.Services;
 using SmartInspectConsole.ViewModels;
 using SmartInspectConsole.Views;
@@ -234,6 +235,15 @@ public partial class MainWindow : Window
         if (sender is ListView listView && listView.DataContext is LogViewViewModel viewModel)
         {
             viewModel.SelectedLogEntries = listView.SelectedItems;
+        }
+    }
+
+    private void ConnectionsListView_MouseDoubleClick(object sender, MouseButtonEventArgs e)
+    {
+        if (sender is ListView listView &&
+            ItemsControl.ContainerFromElement(listView, e.OriginalSource as DependencyObject) is ListViewItem { DataContext: ConnectedApplication app })
+        {
+            _viewModel.OpenApplicationViewCommand.Execute(app);
         }
     }
 }
