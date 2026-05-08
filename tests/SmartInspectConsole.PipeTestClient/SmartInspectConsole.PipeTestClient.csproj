@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AssemblyName>SmartInspectConsole.PipeTestClient</AssemblyName>
+    <RootNamespace>SmartInspectConsole.PipeTestClient</RootNamespace>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\SmartInspectConsole.Core\SmartInspectConsole.Core.csproj" />
+  </ItemGroup>
+
+</Project>

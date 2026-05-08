@@ -394,7 +394,7 @@
                             <StackPanel Orientation="Horizontal">
                                 <TextBlock Text="{Binding Name}" VerticalAlignment="Center"/>
                                 <TextBlock Text=" (" VerticalAlignment="Center" Foreground="{DynamicResource ForegroundSecondaryBrush}"/>
-                                <TextBlock Text="{Binding FilteredCount}" VerticalAlignment="Center" Foreground="{DynamicResource ForegroundSecondaryBrush}"/>
+                                <TextBlock Text="{Binding FilteredCountDisplay}" VerticalAlignment="Center" Foreground="{DynamicResource ForegroundSecondaryBrush}"/>
                                 <TextBlock Text=")" VerticalAlignment="Center" Foreground="{DynamicResource ForegroundSecondaryBrush}"/>
                                 <Button Content="&#x2699;"
                                         Command="{Binding DataContext.EditViewCommand, RelativeSource={RelativeSource AncestorType=TabControl}}"
@@ -737,6 +737,7 @@
                                 </GridViewColumn>
                                 <GridViewColumn Header="Application" Width="140" DisplayMemberBinding="{Binding AppName}"/>
                                 <GridViewColumn Header="Host" Width="110" DisplayMemberBinding="{Binding HostName}"/>
+                                <GridViewColumn Header="Type" Width="80" DisplayMemberBinding="{Binding Transport}"/>
                                 <GridViewColumn Header="Messages" Width="80" DisplayMemberBinding="{Binding MessageCount, StringFormat=N0}"/>
                                 <GridViewColumn Header="Muted" Width="96">
                                     <GridViewColumn.CellTemplate>

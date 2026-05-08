@@ -78,7 +78,7 @@ public class BinaryPacketReader
     private LogEntry ParseLogEntry()
     {
         // Header: 48 bytes
-        var logEntryType = (LogEntryType)ReadInt();
+        var logEntryType = ReadLogEntryType();
         var viewerId = (ViewerId)ReadInt();
         var appNameLength = ReadInt();
         var sessionNameLength = ReadInt();
@@ -116,6 +116,20 @@ public class BinaryPacketReader
             ThreadId = threadId,
             Timestamp = timestamp,
             Color = color
+        };
+    }
+
+    private LogEntryType ReadLogEntryType()
+    {
+        var protocolValue = ReadInt();
+
+        // Native SmartInspect binary values encode leave before enter.
+        // Keep the app model semantic and translate at the protocol boundary.
+        return protocolValue switch
+        {
+            1 => LogEntryType.LeaveMethod,
+            2 => LogEntryType.EnterMethod,
+            _ => (LogEntryType)protocolValue
         };
     }
 

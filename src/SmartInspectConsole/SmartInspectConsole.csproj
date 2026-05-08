@@ -27,9 +27,14 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <UseWPF>true</UseWPF>
-    <Version>1.0.0.88</Version>
-    <AssemblyVersion>1.0.0.88</AssemblyVersion>
-    <FileVersion>1.0.0.88</FileVersion>
+    <Version>1.0.1.2</Version>
+    <AssemblyVersion>1.0.1.2</AssemblyVersion>
+    <FileVersion>1.0.1.2</FileVersion>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <SelfContained>true</SelfContained>
+    <PublishSingleFile>true</PublishSingleFile>
+    <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+    <PublishDir>..\..\publish\</PublishDir>
     <Product>SmartInspect Console</Product>
     <Company>Nick Hustak</Company>
     <Copyright>Copyright (c) 2026 Nick Hustak</Copyright>

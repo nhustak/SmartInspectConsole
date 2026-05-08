@@ -6,4 +6,8 @@
     <Project Path="src/SmartInspectConsole/SmartInspectConsole.csproj" />
     <Project Path="src/SmartInspectConsole.LoadTester/SmartInspectConsole.LoadTester.csproj" />
   </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/SmartInspectConsole.PipeTestClient/SmartInspectConsole.PipeTestClient.csproj" />
+    <Project Path="tests/SmartInspectConsole.Pipe.IntegrationTests/SmartInspectConsole.Pipe.IntegrationTests.csproj" />
+  </Folder>
 </Solution>

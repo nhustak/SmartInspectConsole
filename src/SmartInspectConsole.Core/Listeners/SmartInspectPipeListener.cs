@@ -18,6 +18,7 @@ public class SmartInspectPipeListener : IPacketListener
     public const string DefaultPipeName = "smartinspect";
     private const string ServerBanner = "SmartInspect Console v1.0\n";
     private const int InOutBufferSize = 4096;
+    private const int PendingAcceptors = 4;
 
     private readonly string _pipeName;
     private CancellationTokenSource? _cts;
@@ -25,7 +26,7 @@ public class SmartInspectPipeListener : IPacketListener
     private readonly ConcurrentDictionary<string, Task> _clientTasks = new();
     private readonly BinaryPacketReader _packetReader = new();
     private int _clientCounter;
-    private Task? _acceptLoopTask;
+    private readonly List<Task> _acceptLoopTasks = [];
     private int _waitingAcceptors;
     private long _totalConnectionsAccepted;
     private string? _lastError;
@@ -67,7 +68,11 @@ public class SmartInspectPipeListener : IPacketListener
 
         _cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         IsListening = true;
-        _acceptLoopTask = AcceptConnectionsAsync(_cts.Token);
+        _acceptLoopTasks.Clear();
+        for (var i = 0; i < PendingAcceptors; i++)
+        {
+            _acceptLoopTasks.Add(AcceptConnectionsAsync(_cts.Token));
+        }
 
         await Task.CompletedTask;
     }
@@ -87,22 +92,23 @@ public class SmartInspectPipeListener : IPacketListener
         }
         _clients.Clear();
 
-        // Wait for the accept loop to complete
-        if (_acceptLoopTask != null)
+        // Wait for the accept loops to complete
+        if (_acceptLoopTasks.Count > 0)
         {
             try
             {
-                await _acceptLoopTask.WaitAsync(TimeSpan.FromSeconds(2));
+                await Task.WhenAll(_acceptLoopTasks).WaitAsync(TimeSpan.FromSeconds(2));
             }
             catch (TimeoutException)
             {
-                // Accept loop didn't complete in time, but we've cancelled it
+                // Accept loops didn't complete in time, but we've cancelled them
             }
             catch (OperationCanceledException)
             {
                 // Expected when cancellation propagates
             }
-            _acceptLoopTask = null;
+
+            _acceptLoopTasks.Clear();
         }
 
         if (_clientTasks.Count > 0)

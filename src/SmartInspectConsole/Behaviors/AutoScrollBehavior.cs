@@ -75,7 +75,13 @@ public static class AutoScrollBehavior
 
     private static void OnCollectionChanged(ListView listView, NotifyCollectionChangedEventArgs args)
     {
-        if (args.Action == NotifyCollectionChangedAction.Add && GetAutoScroll(listView))
+        var shouldScroll = args.Action is
+            NotifyCollectionChangedAction.Add or
+            NotifyCollectionChangedAction.Reset or
+            NotifyCollectionChangedAction.Replace or
+            NotifyCollectionChangedAction.Move;
+
+        if (shouldScroll && GetAutoScroll(listView))
         {
             var state = GetOrCreateState(listView);
             if (state.ScrollScheduled)

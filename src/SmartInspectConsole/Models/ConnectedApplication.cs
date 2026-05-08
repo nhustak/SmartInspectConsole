@@ -10,6 +10,7 @@ public class ConnectedApplication : ViewModelBase
     private string _clientId = string.Empty;
     private string _appName = string.Empty;
     private string _hostName = string.Empty;
+    private string _transport = string.Empty;
     private long _messageCount;
     private bool _isMuted;
     private bool _isConnected = true;
@@ -43,6 +44,12 @@ public class ConnectedApplication : ViewModelBase
     public string DisplayName => string.IsNullOrEmpty(AppName)
         ? ClientId
         : string.IsNullOrEmpty(HostName) ? AppName : $"{AppName} @ {HostName}";
+
+    public string Transport
+    {
+        get => _transport;
+        set => SetProperty(ref _transport, value);
+    }
 
     /// <summary>
     /// Key used for mute lookup: "AppName@HostName"

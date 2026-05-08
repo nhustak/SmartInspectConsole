@@ -1,0 +1,9 @@
+PipeTestClient failed: TimeoutException: The operation has timed out.
+   at System.IO.Pipes.NamedPipeClientStream.ConnectInternal(Int32 timeout, CancellationToken cancellationToken, Int32 startTime)
+   at System.Threading.ExecutionContext.RunFromThreadPoolDispatchLoop(Thread threadPoolThread, ExecutionContext executionContext, ContextCallback callback, Object state)
+--- End of stack trace from previous location ---
+   at System.Threading.ExecutionContext.RunFromThreadPoolDispatchLoop(Thread threadPoolThread, ExecutionContext executionContext, ContextCallback callback, Object state)
+   at System.Threading.Tasks.Task.ExecuteWithThreadLocal(Task& currentTaskSlot, Thread threadPoolThread)
+--- End of stack trace from previous location ---
+   at SmartInspectConsole.PipeTestClient.Program.Main(String[] args) in C:\Project\Utility\SmartInspectConsole\tests\SmartInspectConsole.PipeTestClient\Program.cs:line 25
+   at SmartInspectConsole.PipeTestClient.Program.Main(String[] args) in C:\Project\Utility\SmartInspectConsole\tests\SmartInspectConsole.PipeTestClient\Program.cs:line 62

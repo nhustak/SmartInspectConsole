@@ -72,7 +72,7 @@ public class BinaryPacketWriter
         var buffer = new byte[size];
         var pos = 0;
 
-        WriteInt(buffer, ref pos, (int)entry.LogEntryType);
+        WriteInt(buffer, ref pos, ToProtocolLogEntryType(entry.LogEntryType));
         WriteInt(buffer, ref pos, (int)entry.ViewerId);
         WriteInt(buffer, ref pos, appNameBytes.Length);
         WriteInt(buffer, ref pos, sessionNameBytes.Length);
@@ -91,6 +91,18 @@ public class BinaryPacketWriter
         WriteBytes(buffer, ref pos, dataBytes);
 
         return buffer;
+    }
+
+    private static int ToProtocolLogEntryType(LogEntryType logEntryType)
+    {
+        // Native SmartInspect binary values encode leave before enter.
+        // Keep serialized .sil output compatible with the protocol.
+        return logEntryType switch
+        {
+            LogEntryType.EnterMethod => 2,
+            LogEntryType.LeaveMethod => 1,
+            _ => (int)logEntryType
+        };
     }
 
     private byte[] SerializeWatch(Watch watch)

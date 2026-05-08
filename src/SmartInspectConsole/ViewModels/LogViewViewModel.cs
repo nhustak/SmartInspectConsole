@@ -20,7 +20,8 @@ public class LogViewViewModel : ViewModelBase
 {
     private readonly ObservableCollection<LogEntry> _allLogEntries;
     private readonly object _lockObject;
-    private readonly CollectionViewSource _viewSource;
+    private CollectionViewSource? _viewSource;
+    private ICollectionView? _filteredLogEntries;
     private readonly string[] _emptyFilterValues = [];
 
     private string _name = "View";
@@ -86,17 +87,6 @@ public class LogViewViewModel : ViewModelBase
         _name = name;
         _isPrimaryView = isPrimaryView;
 
-        // Create a NEW filtered view for this view (not the shared default view)
-        // Each view needs its own CollectionViewSource to have independent filters
-        // Keep reference to prevent garbage collection
-        _viewSource = new CollectionViewSource { Source = _allLogEntries };
-        FilteredLogEntries = _viewSource.View;
-        FilteredLogEntries.Filter = FilterLogEntry;
-        if (FilteredLogEntries is INotifyCollectionChanged notifyCollectionChanged)
-        {
-            notifyCollectionChanged.CollectionChanged += OnFilteredLogEntriesCollectionChanged;
-        }
-
         // Available log levels for filtering
         LogLevels = new ObservableCollection<LogLevelOption>
         {
@@ -110,7 +100,6 @@ public class LogViewViewModel : ViewModelBase
         };
 
         SelectedLogLevel = LogLevels[0];
-        RecountFilteredEntries();
     }
 
     #region Properties
@@ -479,7 +468,7 @@ public class LogViewViewModel : ViewModelBase
 
     #endregion
 
-    public ICollectionView FilteredLogEntries { get; }
+    public ICollectionView FilteredLogEntries => EnsureFilteredLogEntries();
 
     public LogEntry? SelectedLogEntry
     {
@@ -496,10 +485,22 @@ public class LogViewViewModel : ViewModelBase
     public bool IsSelected
     {
         get => _isSelected;
-        set => SetProperty(ref _isSelected, value);
+        set
+        {
+            if (!SetProperty(ref _isSelected, value))
+                return;
+
+            if (value)
+                Activate();
+            else
+                Deactivate();
+
+            OnPropertyChanged(nameof(FilteredCountDisplay));
+        }
     }
 
     public int FilteredCount => _filteredCount;
+    public string FilteredCountDisplay => _isSelected ? _filteredCount.ToString("N0") : "-";
 
     #region Copy Commands
 
@@ -517,6 +518,12 @@ public class LogViewViewModel : ViewModelBase
 
     public void RefreshFilter()
     {
+        if (!_isSelected || _filteredLogEntries == null)
+        {
+            MarkCountUnknown();
+            return;
+        }
+
         if (_refreshSuspensionCount > 0)
         {
             _refreshPending = true;
@@ -793,14 +800,55 @@ public class LogViewViewModel : ViewModelBase
         _titleRegexValid = true;
     }
 
+    private ICollectionView EnsureFilteredLogEntries()
+    {
+        if (_filteredLogEntries != null)
+            return _filteredLogEntries;
+
+        _viewSource = new CollectionViewSource { Source = _allLogEntries };
+        _filteredLogEntries = _viewSource.View;
+        _filteredLogEntries.Filter = FilterLogEntry;
+
+        if (_filteredLogEntries is INotifyCollectionChanged notifyCollectionChanged)
+        {
+            notifyCollectionChanged.CollectionChanged += OnFilteredLogEntriesCollectionChanged;
+        }
+
+        RecountFilteredEntries();
+        return _filteredLogEntries;
+    }
+
+    private void Activate()
+    {
+        EnsureFilteredLogEntries();
+        OnPropertyChanged(nameof(FilteredLogEntries));
+    }
+
+    private void Deactivate()
+    {
+        if (_filteredLogEntries is INotifyCollectionChanged notifyCollectionChanged)
+        {
+            notifyCollectionChanged.CollectionChanged -= OnFilteredLogEntriesCollectionChanged;
+        }
+
+        _filteredLogEntries = null;
+        _viewSource = null;
+        MarkCountUnknown();
+        OnPropertyChanged(nameof(FilteredLogEntries));
+    }
+
     private void RecountFilteredEntries()
     {
+        if (_filteredLogEntries == null)
+            return;
+
         var count = FilteredLogEntries.Cast<object>().Count();
         if (_filteredCount == count)
             return;
 
         _filteredCount = count;
         OnPropertyChanged(nameof(FilteredCount));
+        OnPropertyChanged(nameof(FilteredCountDisplay));
     }
 
     private void OnFilteredLogEntriesCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
@@ -836,6 +884,18 @@ public class LogViewViewModel : ViewModelBase
 
         _filteredCount = count;
         OnPropertyChanged(nameof(FilteredCount));
+        OnPropertyChanged(nameof(FilteredCountDisplay));
+    }
+
+    private void MarkCountUnknown()
+    {
+        if (_filteredCount != 0)
+        {
+            _filteredCount = 0;
+            OnPropertyChanged(nameof(FilteredCount));
+        }
+
+        OnPropertyChanged(nameof(FilteredCountDisplay));
     }
 
     private void ResumeRefresh()

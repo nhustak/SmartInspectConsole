@@ -1,4 +1,6 @@
+using System.IO;
 using System.Windows;
+using System.Windows.Threading;
 using Wpf.Ui.Appearance;
 
 namespace SmartInspectConsole;
@@ -9,6 +11,13 @@ namespace SmartInspectConsole;
 public partial class App : Application
 {
     private static bool _isDarkTheme = true;
+
+    public App()
+    {
+        DispatcherUnhandledException += App_DispatcherUnhandledException;
+        AppDomain.CurrentDomain.UnhandledException += CurrentDomain_UnhandledException;
+        TaskScheduler.UnobservedTaskException += TaskScheduler_UnobservedTaskException;
+    }
 
     public static bool IsDarkTheme
     {
@@ -54,5 +63,46 @@ public partial class App : Application
 
         // Switch WPF UI theme
         ApplicationThemeManager.Apply(_isDarkTheme ? ApplicationTheme.Dark : ApplicationTheme.Light);
+    }
+
+    private static void App_DispatcherUnhandledException(object sender, DispatcherUnhandledExceptionEventArgs e)
+    {
+        var logPath = WriteStartupFailureLog(e.Exception);
+        MessageBox.Show(
+            $"SmartInspect Console hit a startup error and could not continue.\n\nA diagnostic log was written to:\n{logPath}\n\n{e.Exception.Message}",
+            "SmartInspect Console Startup Error",
+            MessageBoxButton.OK,
+            MessageBoxImage.Error);
+
+        e.Handled = true;
+        Current.Shutdown(-1);
+    }
+
+    private static void CurrentDomain_UnhandledException(object sender, UnhandledExceptionEventArgs e)
+    {
+        if (e.ExceptionObject is Exception exception)
+        {
+            WriteStartupFailureLog(exception);
+        }
+    }
+
+    private static void TaskScheduler_UnobservedTaskException(object? sender, UnobservedTaskExceptionEventArgs e)
+    {
+        WriteStartupFailureLog(e.Exception);
+        e.SetObserved();
+    }
+
+    public static string WriteStartupFailureLog(Exception exception)
+    {
+        var logFolder = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "SmartInspectConsole",
+            "Logs");
+
+        Directory.CreateDirectory(logFolder);
+
+        var logPath = Path.Combine(logFolder, $"startup-error-{DateTime.Now:yyyyMMdd-HHmmss}.log");
+        File.WriteAllText(logPath, exception.ToString());
+        return logPath;
     }
 }

@@ -51,6 +51,7 @@ public sealed record ApplicationSummaryDto
     public required string ApplicationKey { get; init; }
     public required string AppName { get; init; }
     public required string HostName { get; init; }
+    public required string Transport { get; init; }
     public required bool IsConnected { get; init; }
     public required bool IsMuted { get; init; }
     public required long MessageCount { get; init; }

@@ -1,3 +1,4 @@
+using System.IO;
 using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Controls;
@@ -62,10 +63,41 @@ public partial class MainWindow : Window
         DarkThemeMenuItem.IsChecked = App.IsDarkTheme;
         LightThemeMenuItem.IsChecked = !App.IsDarkTheme;
 
-        await _localApiHost.StartAsync();
+        try
+        {
+            await _localApiHost.StartAsync();
+        }
+        catch (IOException ex) when (IsAddressInUse(ex))
+        {
+            MessageBoxHelper.Show(
+                $"SmartInspect Console could not start its local API/MCP endpoint at {_localApiHost.BaseUrl} because the port is already in use.\n\nThe desktop UI will stay open, but MCP and local API features are unavailable in this instance.",
+                "Local API Unavailable",
+                MessageBoxButton.OK,
+                MessageBoxImage.Warning);
+        }
+        catch (Exception ex)
+        {
+            var logPath = App.WriteStartupFailureLog(ex);
+            MessageBoxHelper.Show(
+                $"SmartInspect Console could not start its local API/MCP endpoint at {_localApiHost.BaseUrl}.\n\nThe desktop UI will stay open, but MCP and local API features are unavailable in this instance.\n\nA diagnostic log was written to:\n{logPath}\n\n{ex.Message}",
+                "Local API Unavailable",
+                MessageBoxButton.OK,
+                MessageBoxImage.Warning);
+        }
 
         // Auto-start listening
         await _viewModel.StartAsync();
+    }
+
+    private static bool IsAddressInUse(Exception ex)
+    {
+        for (var current = ex; current != null; current = current.InnerException)
+        {
+            if (current is System.Net.Sockets.SocketException { SocketErrorCode: System.Net.Sockets.SocketError.AddressAlreadyInUse })
+                return true;
+        }
+
+        return false;
     }
 
     private async void MainWindow_Closing(object? sender, System.ComponentModel.CancelEventArgs e)

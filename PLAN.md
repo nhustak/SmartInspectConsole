@@ -3,6 +3,7 @@
 ## Overview
 
 Enable JavaScript/browser applications to send logs to SmartInspect Console.
+Sourced from:  C:\ProjDotNet\SmartInspect
 
 ## Approaches
 

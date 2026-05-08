@@ -104,11 +104,13 @@ public sealed class SmartInspectLogBackend : ISmartInspectLogBackend
                     ClientId = clientId,
                     ApplicationKey = clientId,
                     AppName = clientId,
-                    HostName = transport
+                    HostName = transport,
+                    Transport = transport
                 };
                 _applicationsByClientId[clientId] = application;
             }
 
+            application.Transport = string.IsNullOrWhiteSpace(transport) ? application.Transport : transport;
             application.IsConnected = true;
             application.ConnectedAtUtc ??= DateTime.UtcNow;
             application.DisconnectedAtUtc = null;
@@ -280,6 +282,7 @@ public sealed class SmartInspectLogBackend : ISmartInspectLogBackend
                     ApplicationKey = app.ApplicationKey,
                     AppName = app.AppName,
                     HostName = app.HostName,
+                    Transport = app.Transport,
                     IsConnected = app.IsConnected,
                     IsMuted = app.IsMuted,
                     MessageCount = app.MessageCount,
@@ -643,6 +646,7 @@ public sealed class SmartInspectLogBackend : ISmartInspectLogBackend
         public string ApplicationKey { get; set; } = string.Empty;
         public string AppName { get; set; } = string.Empty;
         public string HostName { get; set; } = string.Empty;
+        public string Transport { get; set; } = string.Empty;
         public bool IsConnected { get; set; }
         public bool IsMuted { get; set; }
         public long MessageCount { get; set; }

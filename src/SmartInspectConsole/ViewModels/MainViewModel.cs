@@ -69,6 +69,7 @@ public class MainViewModel : ViewModelBase, IDisposable
 
     // Connection Manager
     private readonly Dictionary<string, ConnectedApplication> _connectionsByClientId = new();
+    private readonly Dictionary<string, string> _connectionTransportsByClientId = new(StringComparer.Ordinal);
     private readonly HashSet<string> _mutedApps = new();
     private readonly HashSet<string> _availableAppNameSet = new(StringComparer.OrdinalIgnoreCase);
     private readonly HashSet<string> _availableSessionSet = new(StringComparer.OrdinalIgnoreCase);
@@ -205,11 +206,16 @@ public class MainViewModel : ViewModelBase, IDisposable
         get => _selectedView;
         set
         {
-            if (_selectedView != null)
-                _selectedView.IsSelected = false;
+            if (ReferenceEquals(_selectedView, value))
+                return;
+
+            var previousView = _selectedView;
 
             if (SetProperty(ref _selectedView, value))
             {
+                if (previousView != null)
+                    previousView.IsSelected = false;
+
                 if (_selectedView != null)
                     _selectedView.IsSelected = true;
 
@@ -1032,6 +1038,7 @@ public class MainViewModel : ViewModelBase, IDisposable
 
         // Check if this client already has a visible connection (shouldn't normally)
         _connectionsByClientId.TryGetValue(clientId, out var connection);
+        var transport = GetTransportName(clientId);
 
         // Check if there's already a connection with this app+host identity (reconnect case)
         var existing = ConnectedApplications.FirstOrDefault(c =>
@@ -1055,6 +1062,7 @@ public class MainViewModel : ViewModelBase, IDisposable
             connection = new ConnectedApplication
             {
                 ClientId = clientId,
+                Transport = transport,
                 IsConnected = true
             };
             connection.PropertyChanged += OnConnectionPropertyChanged;
@@ -1068,6 +1076,7 @@ public class MainViewModel : ViewModelBase, IDisposable
 
         connection.AppName = appName;
         connection.HostName = hostName;
+        connection.Transport = transport;
         connection.IsMuted = _mutedApps.Contains(muteKey);
 
         StatusText = $"Client connected: {appName} @ {hostName}";
@@ -1077,7 +1086,9 @@ public class MainViewModel : ViewModelBase, IDisposable
     {
         Application.Current.Dispatcher.BeginInvoke(() =>
         {
-            _backend.RecordClientConnected(e.ClientId, GetTransportName(sender));
+            var transport = GetTransportName(sender);
+            _connectionTransportsByClientId[e.ClientId] = transport;
+            _backend.RecordClientConnected(e.ClientId, transport);
 
             // Only track the clientId internally — don't add to visible list yet.
             // The connection becomes visible when HandleLogHeader identifies it.
@@ -1226,6 +1237,7 @@ public class MainViewModel : ViewModelBase, IDisposable
                 ClientId = update.ClientId,
                 AppName = appName,
                 HostName = hostName,
+                Transport = GetTransportName(update.ClientId),
                 IsConnected = !string.IsNullOrWhiteSpace(update.ClientId),
                 IsMuted = _mutedApps.Contains(muteKey)
             };
@@ -1236,12 +1248,14 @@ public class MainViewModel : ViewModelBase, IDisposable
                  string.IsNullOrWhiteSpace(connection.ClientId))
         {
             connection.ClientId = update.ClientId;
+            connection.Transport = GetTransportName(update.ClientId);
         }
 
         connection.MessageCount += update.MessageCount;
         if (!string.IsNullOrWhiteSpace(update.ClientId))
         {
             connection.IsConnected = true;
+            connection.Transport = GetTransportName(update.ClientId);
             _connectionsByClientId[update.ClientId] = connection;
         }
     }
@@ -2033,6 +2047,26 @@ public class MainViewModel : ViewModelBase, IDisposable
             SmartInspectWebSocketListener => "websocket",
             _ => "unknown"
         };
+    }
+
+    private string GetTransportName(string clientId)
+    {
+        if (!string.IsNullOrWhiteSpace(clientId) &&
+            _connectionTransportsByClientId.TryGetValue(clientId, out var transport) &&
+            !string.IsNullOrWhiteSpace(transport))
+        {
+            return transport;
+        }
+
+        if (clientId.StartsWith("tcp-", StringComparison.OrdinalIgnoreCase))
+            return "tcp";
+        if (clientId.StartsWith("pipe-", StringComparison.OrdinalIgnoreCase))
+            return "pipe";
+        if (clientId.StartsWith("ws-", StringComparison.OrdinalIgnoreCase) ||
+            clientId.StartsWith("websocket-", StringComparison.OrdinalIgnoreCase))
+            return "websocket";
+
+        return "unknown";
     }
 
     private void UpdateQueueHighWaterMark(int queueDepth)
