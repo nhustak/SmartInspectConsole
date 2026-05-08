@@ -37,6 +37,10 @@ nul
 publish/
 SmartInspectConsole-SetupFiles/
 SmartInspectConsole-cache/
+Prerequisites/
+
+# Generated test/load output
+artifacts/
 
 # Node.js (smartinspect-js)
 node_modules/
