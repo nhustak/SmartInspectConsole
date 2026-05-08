@@ -43,6 +43,11 @@ public partial class MainWindow : Window
 
         Loaded += MainWindow_Loaded;
         Closing += MainWindow_Closing;
+        Activated += (_, _) => _viewModel.NotifyUserActivity();
+        PreviewKeyDown += (_, _) => _viewModel.NotifyUserActivity();
+        PreviewMouseDown += (_, _) => _viewModel.NotifyUserActivity();
+        PreviewMouseWheel += (_, _) => _viewModel.NotifyUserActivity();
+        PreviewMouseMove += (_, _) => _viewModel.NotifyUserActivity();
 
         // Apply dark title bar via DWM
         SourceInitialized += (_, _) => ApplyDarkTitleBar(App.IsDarkTheme);

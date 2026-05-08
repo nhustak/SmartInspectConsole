@@ -16,7 +16,17 @@ public sealed class BatchDiagnosticsSnapshot
     public long TotalWatchUpdatesRendered { get; init; }
     public long TotalProcessFlowsRendered { get; init; }
     public int MaxObservedLogQueueDepth { get; init; }
+    public int DeferredDisplayLogEntries { get; init; }
+    public bool DisplayUpdatesPaused { get; init; }
 
     public override string ToString()
-        => $"Queues L:{LogQueueDepth:N0} W:{WatchQueueDepth:N0} P:{ProcessFlowQueueDepth:N0} | Batch {LastBatchSize:N0} in {LastBatchDurationMs:F1} ms | Rendered {TotalLogEntriesRendered:N0}/{TotalLogEntriesReceived:N0} | Dropped {TotalLogEntriesDroppedFromPendingQueue:N0}";
+    {
+        var displayState = DisplayUpdatesPaused
+            ? $" | UI paused, deferred {DeferredDisplayLogEntries:N0}"
+            : DeferredDisplayLogEntries > 0
+                ? $" | UI catching up {DeferredDisplayLogEntries:N0}"
+                : string.Empty;
+
+        return $"Queues L:{LogQueueDepth:N0} W:{WatchQueueDepth:N0} P:{ProcessFlowQueueDepth:N0} | Batch {LastBatchSize:N0} in {LastBatchDurationMs:F1} ms | Rendered {TotalLogEntriesRendered:N0}/{TotalLogEntriesReceived:N0} | Dropped {TotalLogEntriesDroppedFromPendingQueue:N0}{displayState}";
+    }
 }

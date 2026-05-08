@@ -51,6 +51,7 @@ public class MainViewModel : ViewModelBase, IDisposable
     private const int MediumBacklogThreshold = 10000;
     private const int HighBacklogThreshold = 50000;
     private const int MaxPendingLogEntries = 100000;
+    private static readonly TimeSpan IdleDisplayPauseAfter = TimeSpan.FromMinutes(1);
     private const double TrimTargetRetentionRatio = 0.90;
 
     private DateTime? _lastLogEntryTimestamp;
@@ -74,9 +75,12 @@ public class MainViewModel : ViewModelBase, IDisposable
     private readonly HashSet<string> _availableAppNameSet = new(StringComparer.OrdinalIgnoreCase);
     private readonly HashSet<string> _availableSessionSet = new(StringComparer.OrdinalIgnoreCase);
     private readonly HashSet<string> _availableHostNameSet = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Queue<(LogEntry LogEntry, string ClientId)> _deferredDisplayLogEntries = new();
     private int _maxLogEntries = 20_000;
     private bool _isProcessingPendingItems;
     private bool _immediateDrainScheduled;
+    private bool _displayUpdatesPaused;
+    private DateTime _lastUserActivityUtc = DateTime.UtcNow;
     private long _totalLogEntriesReceived;
     private long _totalLogEntriesRendered;
     private long _totalLogEntriesDroppedFromPendingQueue;
@@ -225,6 +229,20 @@ public class MainViewModel : ViewModelBase, IDisposable
     }
 
     public LogEntry? SelectedLogEntry => SelectedView?.SelectedLogEntry;
+
+    public void NotifyUserActivity()
+    {
+        _lastUserActivityUtc = DateTime.UtcNow;
+
+        if (!_displayUpdatesPaused)
+            return;
+
+        _displayUpdatesPaused = false;
+        StatusText = _deferredDisplayLogEntries.Count > 0
+            ? $"Resuming display updates ({_deferredDisplayLogEntries.Count:N0} buffered)"
+            : "Resuming display updates";
+        ScheduleImmediateDrain();
+    }
 
     public string StatusText
     {
@@ -832,14 +850,19 @@ public class MainViewModel : ViewModelBase, IDisposable
         var newHostNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var maxBatchSize = GetAdaptiveBatchSize();
         var logEntriesToAdd = new List<LogEntry>(maxBatchSize);
+        var displayUpdatesPaused = ShouldPauseDisplayUpdates();
 
         try
         {
+            if (!displayUpdatesPaused && _deferredDisplayLogEntries.Count > 0)
+            {
+                logEntriesAdded += DrainDeferredDisplayLogEntries(maxBatchSize, logEntriesToAdd, connectionUpdates, newAppNames, newSessions, newHostNames);
+            }
+
             // Process log entries in batch
             while (logEntriesProcessed < maxBatchSize && _pendingLogEntries.TryDequeue(out var pending))
             {
                 var logEntry = pending.LogEntry;
-                AccumulateConnectionUpdate(connectionUpdates, pending.ClientId, logEntry.AppName, logEntry.HostName);
 
                 // Skip muted apps - discard before adding to collection
                 var muteKey = $"{logEntry.AppName}@{logEntry.HostName}";
@@ -857,12 +880,21 @@ public class MainViewModel : ViewModelBase, IDisposable
                 }
                 _lastLogEntryTimestamp = logEntry.Timestamp;
 
-                logEntriesToAdd.Add(logEntry);
-
                 _backend.AppendLogEntry(logEntry, pending.ClientId);
-                TrackAvailableFilterValues(logEntry, newAppNames, newSessions, newHostNames);
+                if (displayUpdatesPaused)
+                {
+                    DeferLogEntryForDisplay(pending);
+                }
+                else
+                {
+                    logEntriesToAdd.Add(logEntry);
+                    AccumulateConnectionUpdate(connectionUpdates, pending.ClientId, logEntry.AppName, logEntry.HostName);
+                    TrackAvailableFilterValues(logEntry, newAppNames, newSessions, newHostNames);
+                }
+
                 logEntriesProcessed++;
-                logEntriesAdded++;
+                if (!displayUpdatesPaused)
+                    logEntriesAdded++;
             }
 
             if (logEntriesToAdd.Count > 0)
@@ -924,7 +956,7 @@ public class MainViewModel : ViewModelBase, IDisposable
                 processFlowsProcessed++;
             }
 
-            if (logEntriesProcessed > 0)
+            if (logEntriesAdded > 0)
             {
                 Interlocked.Add(ref _totalLogEntriesRendered, logEntriesAdded);
                 OnPropertyChanged(nameof(EntryCount));
@@ -943,7 +975,10 @@ public class MainViewModel : ViewModelBase, IDisposable
             UpdateBackendQueueDepth();
             _isProcessingPendingItems = false;
 
-            if (_pendingLogEntries.Count >= ImmediateDrainThreshold || _pendingWatches.Count >= ImmediateDrainThreshold || _pendingProcessFlows.Count >= ImmediateDrainThreshold)
+            if (_pendingLogEntries.Count >= ImmediateDrainThreshold ||
+                _pendingWatches.Count >= ImmediateDrainThreshold ||
+                _pendingProcessFlows.Count >= ImmediateDrainThreshold ||
+                (!_displayUpdatesPaused && _deferredDisplayLogEntries.Count > 0))
             {
                 ScheduleImmediateDrain();
             }
@@ -1429,6 +1464,7 @@ public class MainViewModel : ViewModelBase, IDisposable
     private void ClearLog()
     {
         _lastLogEntryTimestamp = null;
+        _deferredDisplayLogEntries.Clear();
         _backend.ClearLog();
 
         lock (_logEntriesLock)
@@ -1968,6 +2004,52 @@ public class MainViewModel : ViewModelBase, IDisposable
         }
     }
 
+    private bool ShouldPauseDisplayUpdates()
+    {
+        var shouldPause = DateTime.UtcNow - _lastUserActivityUtc >= IdleDisplayPauseAfter;
+        if (shouldPause == _displayUpdatesPaused)
+            return _displayUpdatesPaused;
+
+        _displayUpdatesPaused = shouldPause;
+        if (_displayUpdatesPaused)
+        {
+            StatusText = "Display updates paused while idle; ingestion continues";
+        }
+
+        return _displayUpdatesPaused;
+    }
+
+    private void DeferLogEntryForDisplay((LogEntry LogEntry, string ClientId) pending)
+    {
+        _deferredDisplayLogEntries.Enqueue(pending);
+
+        while (_deferredDisplayLogEntries.Count > _maxLogEntries)
+        {
+            _deferredDisplayLogEntries.Dequeue();
+        }
+    }
+
+    private int DrainDeferredDisplayLogEntries(
+        int maxBatchSize,
+        List<LogEntry> logEntriesToAdd,
+        Dictionary<string, PendingConnectionUpdate> connectionUpdates,
+        HashSet<string> newAppNames,
+        HashSet<string> newSessions,
+        HashSet<string> newHostNames)
+    {
+        var added = 0;
+        while (added < maxBatchSize && _deferredDisplayLogEntries.Count > 0)
+        {
+            var pending = _deferredDisplayLogEntries.Dequeue();
+            logEntriesToAdd.Add(pending.LogEntry);
+            AccumulateConnectionUpdate(connectionUpdates, pending.ClientId, pending.LogEntry.AppName, pending.LogEntry.HostName);
+            TrackAvailableFilterValues(pending.LogEntry, newAppNames, newSessions, newHostNames);
+            added++;
+        }
+
+        return added;
+    }
+
     private int GetAdaptiveBatchSize()
     {
         var logDepth = _pendingLogEntries.Count;
@@ -2007,7 +2089,9 @@ public class MainViewModel : ViewModelBase, IDisposable
             TotalLogEntriesDroppedFromPendingQueue = Interlocked.Read(ref _totalLogEntriesDroppedFromPendingQueue),
             TotalWatchUpdatesRendered = Interlocked.Read(ref _totalWatchUpdatesRendered),
             TotalProcessFlowsRendered = Interlocked.Read(ref _totalProcessFlowsRendered),
-            MaxObservedLogQueueDepth = _maxObservedLogQueueDepth
+            MaxObservedLogQueueDepth = _maxObservedLogQueueDepth,
+            DeferredDisplayLogEntries = _deferredDisplayLogEntries.Count,
+            DisplayUpdatesPaused = _displayUpdatesPaused
         };
         DiagnosticsText = DiagnosticsSnapshot.ToString();
     }
