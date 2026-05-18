@@ -312,6 +312,14 @@
                         <TextBlock Text="Clear"/>
                     </StackPanel>
                 </Button>
+                <ToggleButton IsChecked="{Binding IsRenderPaused, Mode=OneWay}"
+                              Command="{Binding ToggleRenderPauseCommand}"
+                              ToolTip="{Binding RenderPauseToolTip}">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="||" FontSize="12" Margin="0,0,4,0"/>
+                        <TextBlock Text="{Binding RenderPauseButtonText}"/>
+                    </StackPanel>
+                </ToggleButton>
                 <Separator/>
                 <Button Command="{Binding AddViewCommand}" ToolTip="Add New View">
                     <StackPanel Orientation="Horizontal">

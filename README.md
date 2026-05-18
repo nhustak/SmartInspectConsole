@@ -1,4 +1,4 @@
-# SmartInspect Console v1.0.1.3
+# SmartInspect Console v1.0.1.14
 
 Last updated: 2026-03-26
 

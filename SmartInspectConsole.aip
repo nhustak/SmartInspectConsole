@@ -11,7 +11,7 @@
     <ROW Property="ProductCode" Value="1033:{BD528118-1C11-4C88-8363-D2DC44ED0C0C} " Type="16"/>
     <ROW Property="ProductLanguage" Value="1033"/>
     <ROW Property="ProductName" Value="SmartInspectConsole"/>
-    <ROW Property="ProductVersion" Value="1.0.1.3" Options="32"/>
+    <ROW Property="ProductVersion" Value="1.0.1.14" Options="32"/>
     <ROW Property="SecureCustomProperties" Value="OLDPRODUCTS;AI_NEWERPRODUCTFOUND;AI_SETUPEXEPATH;SETUPEXEDIR"/>
     <ROW Property="UpgradeCode" Value="{797088FF-46D0-4D70-A174-AE48A36FC748}"/>
     <ROW Property="WindowsType9X" MultiBuildValue="DefaultBuild:Windows 9x/ME" ValueLocId="-"/>

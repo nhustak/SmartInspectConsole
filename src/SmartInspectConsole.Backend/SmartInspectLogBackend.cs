@@ -5,6 +5,8 @@ namespace SmartInspectConsole.Backend;
 
 public sealed class SmartInspectLogBackend : ISmartInspectLogBackend
 {
+    private const double TrimTargetRetentionRatio = 0.90;
+
     private readonly object _sync = new();
     private readonly List<StoredLogEntry> _entries = [];
     private readonly Dictionary<string, StoredLogEntry> _entriesById = new(StringComparer.Ordinal);
@@ -618,19 +620,32 @@ public sealed class SmartInspectLogBackend : ISmartInspectLogBackend
 
     private void TrimEntriesIfNeeded()
     {
-        while (_entries.Count > _maxLogEntries)
+        if (_entries.Count <= _maxLogEntries)
         {
-            var removed = _entries[0];
+            return;
+        }
+
+        var trimTarget = Math.Max(1_000, (int)Math.Floor(_maxLogEntries * TrimTargetRetentionRatio));
+        var removeCount = _entries.Count - trimTarget;
+        if (removeCount <= 0)
+        {
+            return;
+        }
+
+        for (var i = 0; i < removeCount; i++)
+        {
+            var removed = _entries[i];
             if (_flaggedEntriesById.TryGetValue(removed.EntryId, out var flagged))
             {
                 flagged.IsTrimmedFromLiveStore = true;
             }
 
-            _entries.RemoveAt(0);
             _entriesById.Remove(removed.EntryId);
             _entryIdsByPacket.Remove(removed.Packet);
-            _totalDroppedByRetention++;
         }
+
+        _entries.RemoveRange(0, removeCount);
+        _totalDroppedByRetention += removeCount;
     }
 
     private static string BuildApplicationKey(string appName, string hostName)

@@ -85,6 +85,17 @@ public sealed record LiveContextDto
     public required long TotalDroppedByRetention { get; init; }
 }
 
+public sealed record RenderStateDto
+{
+    public required bool IsRenderPaused { get; init; }
+    public required bool DisplayUpdatesPaused { get; init; }
+    public required bool WasAutomatic { get; init; }
+    public required int VisibleLogEntryCount { get; init; }
+    public required int MaxLogEntries { get; init; }
+    public required int LogQueueDepth { get; init; }
+    public required string StatusText { get; init; }
+}
+
 public sealed record FlagEntryRequest
 {
     public required string EntryId { get; init; }

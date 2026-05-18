@@ -1,8 +1,7 @@
 using System.Collections.Concurrent;
 using System.IO.Pipes;
-using System.Security.AccessControl;
-using System.Security.Principal;
 using System.Text;
+using System.Threading.Channels;
 using SmartInspectConsole.Core.Enums;
 using SmartInspectConsole.Core.Events;
 using SmartInspectConsole.Core.Packets;
@@ -18,13 +17,13 @@ public class SmartInspectPipeListener : IPacketListener
     public const string DefaultPipeName = "smartinspect";
     private const string ServerBanner = "SmartInspect Console v1.0\n";
     private const int InOutBufferSize = 4096;
-    private const int PendingAcceptors = 4;
+    private const int MaxPipeServerInstances = 254;
+    private const int PendingAcceptors = 64;
 
     private readonly string _pipeName;
     private CancellationTokenSource? _cts;
     private readonly ConcurrentDictionary<string, NamedPipeServerStream> _clients = new();
     private readonly ConcurrentDictionary<string, Task> _clientTasks = new();
-    private readonly BinaryPacketReader _packetReader = new();
     private int _clientCounter;
     private readonly List<Task> _acceptLoopTasks = [];
     private int _waitingAcceptors;
@@ -158,7 +157,8 @@ public class SmartInspectPipeListener : IPacketListener
                 pipeServer = null; // Prevent disposal in finally block
                 var clientTask = HandleClientAsync(clientPipe, clientId, cancellationToken);
                 _clientTasks[clientId] = clientTask;
-                _ = clientTask.ContinueWith(_ => _clientTasks.TryRemove(clientId, out _),
+                _ = clientTask.ContinueWith(_ =>
+                    ((ICollection<KeyValuePair<string, Task>>)_clientTasks).Remove(new KeyValuePair<string, Task>(clientId, clientTask)),
                     CancellationToken.None,
                     TaskContinuationOptions.ExecuteSynchronously,
                     TaskScheduler.Default);
@@ -196,38 +196,14 @@ public class SmartInspectPipeListener : IPacketListener
 
     private NamedPipeServerStream CreatePipeServer()
     {
-        // First try with custom security that allows all users
-        try
-        {
-            var pipeSecurity = new PipeSecurity();
-            pipeSecurity.AddAccessRule(new PipeAccessRule(
-                new SecurityIdentifier(WellKnownSidType.WorldSid, null),
-                PipeAccessRights.ReadWrite,
-                AccessControlType.Allow));
-
-            return NamedPipeServerStreamAcl.Create(
-                _pipeName,
-                PipeDirection.InOut,
-                NamedPipeServerStream.MaxAllowedServerInstances,
-                PipeTransmissionMode.Byte,
-                PipeOptions.Asynchronous,
-                InOutBufferSize,
-                InOutBufferSize,
-                pipeSecurity);
-        }
-        catch (Exception ex) when (ex is UnauthorizedAccessException or IOException or PlatformNotSupportedException or System.Security.SecurityException)
-        {
-            // Fall back to default security (only current user can connect)
-            // This covers machines where ACL creation is restricted or unavailable.
-            return new NamedPipeServerStream(
-                _pipeName,
-                PipeDirection.InOut,
-                NamedPipeServerStream.MaxAllowedServerInstances,
-                PipeTransmissionMode.Byte,
-                PipeOptions.Asynchronous,
-                InOutBufferSize,
-                InOutBufferSize);
-        }
+        return new NamedPipeServerStream(
+            _pipeName,
+            PipeDirection.InOut,
+            MaxPipeServerInstances,
+            PipeTransmissionMode.Byte,
+            PipeOptions.Asynchronous,
+            InOutBufferSize,
+            InOutBufferSize);
     }
 
     private void ReportErrorWithRateLimit(Exception ex)
@@ -256,6 +232,12 @@ public class SmartInspectPipeListener : IPacketListener
     private async Task HandleClientAsync(NamedPipeServerStream pipeServer, string clientId, CancellationToken cancellationToken)
     {
         var clientInfo = string.Empty;
+        var packetChannel = Channel.CreateUnbounded<RawPacket>(new UnboundedChannelOptions
+        {
+            SingleReader = true,
+            SingleWriter = true
+        });
+        var packetProcessingTask = ProcessPacketsAsync(packetChannel.Reader, clientId, cancellationToken);
 
         try
         {
@@ -286,12 +268,7 @@ public class SmartInspectPipeListener : IPacketListener
                 if (bytesRead < size)
                     break; // Connection closed
 
-                // Parse packet
-                var packet = _packetReader.ParsePacket(packetType, payload);
-                if (packet != null)
-                {
-                    OnPacketReceived(new PacketReceivedEventArgs(packet, clientId));
-                }
+                packetChannel.Writer.TryWrite(new RawPacket(packetType, payload));
 
                 // NOTE: Named pipes don't require acknowledgment
             }
@@ -310,10 +287,37 @@ public class SmartInspectPipeListener : IPacketListener
         }
         finally
         {
+            packetChannel.Writer.TryComplete();
+            try { await packetProcessingTask.WaitAsync(TimeSpan.FromSeconds(2)); } catch { }
             _clients.TryRemove(clientId, out _);
             try { pipeServer.Close(); } catch { }
             pipeServer.Dispose();
             OnClientDisconnected(new ClientEventArgs(clientId, clientInfo));
+        }
+    }
+
+    private async Task ProcessPacketsAsync(ChannelReader<RawPacket> reader, string clientId, CancellationToken cancellationToken)
+    {
+        var packetReader = new BinaryPacketReader();
+
+        try
+        {
+            await foreach (var rawPacket in reader.ReadAllAsync(cancellationToken))
+            {
+                var packet = packetReader.ParsePacket(rawPacket.Type, rawPacket.Payload);
+                if (packet != null)
+                {
+                    OnPacketReceived(new PacketReceivedEventArgs(packet, clientId));
+                }
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // Normal shutdown.
+        }
+        catch (Exception ex)
+        {
+            OnError(ex);
         }
     }
 
@@ -355,4 +359,6 @@ public class SmartInspectPipeListener : IPacketListener
         StopAsync().GetAwaiter().GetResult();
         _cts?.Dispose();
     }
+
+    private sealed record RawPacket(PacketType Type, byte[] Payload);
 }

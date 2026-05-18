@@ -8,7 +8,7 @@
 
     <!-- NuGet Package Info -->
     <PackageId>SmartInspect.Relay.AspNetCore</PackageId>
-    <Version>1.0.0</Version>
+    <Version>1.0.0.1</Version>
     <Authors>Nick Hustak</Authors>
     <Company>Nick Hustak</Company>
     <Product>SmartInspect Relay Library</Product>

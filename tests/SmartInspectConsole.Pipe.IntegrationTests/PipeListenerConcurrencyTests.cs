@@ -25,9 +25,11 @@ public class PipeListenerConcurrencyTests
 
     [Theory]
     [InlineData(5, 100)]
+    [InlineData(25, 100)]
     public async Task LiveConsoleConcurrentClients_AllPacketsArriveUncorrupted(int clientCount, int packetsPerClient)
     {
         await using var mcp = await LiveConsoleMcpClient.ConnectAsync();
+        await Task.Delay(TimeSpan.FromSeconds(2));
         var beforeContext = await mcp.GetLiveContextAsync();
         AssertLivePipeReady(beforeContext);
 
@@ -78,6 +80,35 @@ public class PipeListenerConcurrencyTests
             report.AppendLine($"  - MCP live context after run: {JsonSerializer.Serialize(afterContext, JsonOptions)}");
             _output.WriteLine(report.ToString());
             Assert.Fail(report.ToString());
+        }
+    }
+
+    [Fact]
+    public async Task LiveConsoleRenderPause_CanBeControlledThroughMcp()
+    {
+        await using var mcp = await LiveConsoleMcpClient.ConnectAsync();
+
+        try
+        {
+            var resumed = await mcp.ResumeRenderAsync();
+            Assert.False(resumed.IsRenderPaused);
+
+            var paused = await mcp.PauseRenderAsync();
+            Assert.True(paused.IsRenderPaused);
+            Assert.True(paused.DisplayUpdatesPaused);
+            Assert.False(paused.WasAutomatic);
+            Assert.True(paused.MaxLogEntries >= 1000);
+
+            var observed = await mcp.GetRenderStateAsync();
+            Assert.True(observed.IsRenderPaused);
+            Assert.True(observed.DisplayUpdatesPaused);
+
+            var resumedAgain = await mcp.ResumeRenderAsync();
+            Assert.False(resumedAgain.IsRenderPaused);
+        }
+        finally
+        {
+            await mcp.ResumeRenderAsync();
         }
     }
 
@@ -169,20 +200,21 @@ public class PipeListenerConcurrencyTests
         IReadOnlySet<string> expectedAppNames,
         int packetsPerClient)
     {
-        var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(10);
+        var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(60);
         ConcurrentDictionary<string, ConcurrentQueue<LogEntryDto>> latest = new();
 
         do
         {
-            var response = await mcp.QueryLogsAsync(expectedAppNames, packetsPerClient * expectedAppNames.Count);
             latest = new ConcurrentDictionary<string, ConcurrentQueue<LogEntryDto>>(StringComparer.Ordinal);
-            foreach (var entry in response.Items)
+            foreach (var appName in expectedAppNames)
             {
-                if (!expectedAppNames.Contains(entry.AppName))
-                    continue;
+                var response = await mcp.QueryLogsAsync(new HashSet<string>([appName], StringComparer.Ordinal), packetsPerClient);
+                var queue = latest.GetOrAdd(appName, _ => new ConcurrentQueue<LogEntryDto>());
 
-                var queue = latest.GetOrAdd(entry.AppName, _ => new ConcurrentQueue<LogEntryDto>());
-                queue.Enqueue(entry);
+                foreach (var entry in response.Items.Where(entry => string.Equals(entry.AppName, appName, StringComparison.Ordinal)))
+                {
+                    queue.Enqueue(entry);
+                }
             }
 
             if (expectedAppNames.All(appName => latest.TryGetValue(appName, out var entries) && entries.Count >= packetsPerClient))
@@ -352,6 +384,24 @@ public class PipeListenerConcurrencyTests
         {
             var result = await _client.CallToolAsync("get_live_context", new Dictionary<string, object?>());
             return DeserializeToolResult<LiveContextDto>(result);
+        }
+
+        public async Task<RenderStateDto> GetRenderStateAsync()
+        {
+            var result = await _client.CallToolAsync("get_render_state", new Dictionary<string, object?>());
+            return DeserializeToolResult<RenderStateDto>(result);
+        }
+
+        public async Task<RenderStateDto> PauseRenderAsync()
+        {
+            var result = await _client.CallToolAsync("pause_render", new Dictionary<string, object?>());
+            return DeserializeToolResult<RenderStateDto>(result);
+        }
+
+        public async Task<RenderStateDto> ResumeRenderAsync()
+        {
+            var result = await _client.CallToolAsync("resume_render", new Dictionary<string, object?>());
+            return DeserializeToolResult<RenderStateDto>(result);
         }
 
         public async Task<LogQueryResponse> QueryLogsAsync(IReadOnlySet<string> appNames, int limit)

@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Threading.Channels;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using SmartInspect.Relay.AspNetCore.Configuration;
@@ -14,12 +15,16 @@ public class CallbackForwarder : ILogForwarder
     private readonly ILogger<CallbackForwarder> _logger;
     private readonly SmartInspectRelayOptions _options;
     private long _messagesForwarded;
+    private int _queuedMessages;
     private DateTime? _lastForwardedAt;
+    private CancellationTokenSource? _processingCts;
+    private Channel<CallbackMessage>? _channel;
+    private Task? _processingTask;
     private bool _started;
 
     public bool IsConnected => _started && HasCallbacks;
     public long MessagesForwarded => Interlocked.Read(ref _messagesForwarded);
-    public int MessagesBuffered => 0; // No buffering in callback mode
+    public int MessagesBuffered => Math.Max(0, Volatile.Read(ref _queuedMessages));
     public DateTime? LastForwardedAt => _lastForwardedAt;
 
     private bool HasCallbacks =>
@@ -45,21 +50,52 @@ public class CallbackForwarder : ILogForwarder
                 "Configure OnLogEntry, OnWatch, OnProcessFlow, or OnControl in options.");
         }
 
+        var capacity = Math.Max(1, _options.BufferSize);
+        _channel = Channel.CreateBounded<CallbackMessage>(new BoundedChannelOptions(capacity)
+        {
+            FullMode = BoundedChannelFullMode.Wait,
+            SingleReader = true,
+            SingleWriter = false
+        });
+        _processingCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        _processingTask = ProcessQueueAsync(_processingCts.Token);
         _started = true;
         _logger.LogInformation("Callback forwarder started");
         return Task.CompletedTask;
     }
 
-    public Task StopAsync()
+    public async Task StopAsync()
     {
         _started = false;
+        _channel?.Writer.TryComplete();
+        _processingCts?.Cancel();
+
+        if (_processingTask != null)
+        {
+            try
+            {
+                var completedTask = await Task.WhenAny(_processingTask, Task.Delay(TimeSpan.FromSeconds(5)));
+                if (completedTask == _processingTask)
+                {
+                    await _processingTask;
+                }
+                else
+                {
+                    _logger.LogWarning("Callback forwarder queue did not stop within 5 seconds");
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                // Expected during shutdown.
+            }
+        }
+
         _logger.LogInformation("Callback forwarder stopped");
-        return Task.CompletedTask;
     }
 
     public Task<bool> ForwardAsync(string json, CancellationToken cancellationToken = default)
     {
-        if (!_started)
+        if (!_started || _channel == null)
         {
             return Task.FromResult(false);
         }
@@ -76,34 +112,29 @@ public class CallbackForwarder : ILogForwarder
             }
 
             var messageType = typeElement.GetString();
-            var handled = false;
-
-            switch (messageType)
+            CallbackMessage? message = messageType switch
             {
-                case "logEntry":
-                    handled = ForwardLogEntry(root);
-                    break;
-                case "watch":
-                    handled = ForwardWatch(root);
-                    break;
-                case "processFlow":
-                    handled = ForwardProcessFlow(root);
-                    break;
-                case "control":
-                    handled = ForwardControl(root);
-                    break;
-                default:
-                    _logger.LogWarning("Unknown message type: {Type}", messageType);
-                    return Task.FromResult(false);
+                "logEntry" => CreateLogEntryMessage(root),
+                "watch" => CreateWatchMessage(root),
+                "processFlow" => CreateProcessFlowMessage(root),
+                "control" => CreateControlMessage(root),
+                _ => null
+            };
+
+            if (message == null)
+            {
+                _logger.LogWarning("Unknown or unhandled message type: {Type}", messageType);
+                return Task.FromResult(false);
             }
 
-            if (handled)
+            if (_channel.Writer.TryWrite(message))
             {
-                Interlocked.Increment(ref _messagesForwarded);
-                _lastForwardedAt = DateTime.UtcNow;
+                Interlocked.Increment(ref _queuedMessages);
+                return Task.FromResult(true);
             }
 
-            return Task.FromResult(handled);
+            _logger.LogWarning("Callback forwarder queue is full; dropping message");
+            return Task.FromResult(false);
         }
         catch (JsonException ex)
         {
@@ -130,50 +161,87 @@ public class CallbackForwarder : ILogForwarder
         return forwarded;
     }
 
-    private bool ForwardLogEntry(JsonElement root)
+    private CallbackMessage? CreateLogEntryMessage(JsonElement root)
     {
-        if (_options.OnLogEntry == null) return false;
+        if (_options.OnLogEntry == null) return null;
 
         var level = GetString(root, "logEntryType") ?? "message";
         var title = GetString(root, "title") ?? GetString(root, "message") ?? "";
         var data = GetString(root, "data");
         var viewerId = GetString(root, "viewerId");
 
-        _options.OnLogEntry(level, title, data, viewerId);
-        return true;
+        return new CallbackMessage(message => _options.OnLogEntry(message.Value1, message.Value2, message.Value3, message.Value4),
+            level,
+            title,
+            data,
+            viewerId);
     }
 
-    private bool ForwardWatch(JsonElement root)
+    private CallbackMessage? CreateWatchMessage(JsonElement root)
     {
-        if (_options.OnWatch == null) return false;
+        if (_options.OnWatch == null) return null;
 
         var name = GetString(root, "name") ?? "unknown";
         var value = GetString(root, "value") ?? "";
         var watchType = GetString(root, "watchType") ?? "string";
 
-        _options.OnWatch(name, value, watchType);
-        return true;
+        return new CallbackMessage(message => _options.OnWatch(message.Value1, message.Value2, message.Value3 ?? "string"),
+            name,
+            value,
+            watchType,
+            null);
     }
 
-    private bool ForwardProcessFlow(JsonElement root)
+    private CallbackMessage? CreateProcessFlowMessage(JsonElement root)
     {
-        if (_options.OnProcessFlow == null) return false;
+        if (_options.OnProcessFlow == null) return null;
 
         var flowType = GetString(root, "flowType") ?? "";
         var title = GetString(root, "title") ?? "";
 
-        _options.OnProcessFlow(flowType, title);
-        return true;
+        return new CallbackMessage(message => _options.OnProcessFlow(message.Value1, message.Value2),
+            flowType,
+            title,
+            null,
+            null);
     }
 
-    private bool ForwardControl(JsonElement root)
+    private CallbackMessage? CreateControlMessage(JsonElement root)
     {
-        if (_options.OnControl == null) return false;
+        if (_options.OnControl == null) return null;
 
         var command = GetString(root, "command") ?? "";
 
-        _options.OnControl(command);
-        return true;
+        return new CallbackMessage(message => _options.OnControl(message.Value1),
+            command,
+            string.Empty,
+            null,
+            null);
+    }
+
+    private async Task ProcessQueueAsync(CancellationToken cancellationToken)
+    {
+        var reader = _channel?.Reader;
+        if (reader == null)
+        {
+            return;
+        }
+
+        await foreach (var message in reader.ReadAllAsync(cancellationToken))
+        {
+            Interlocked.Decrement(ref _queuedMessages);
+
+            try
+            {
+                message.Forward(message);
+                Interlocked.Increment(ref _messagesForwarded);
+                _lastForwardedAt = DateTime.UtcNow;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error forwarding queued callback message");
+            }
+        }
     }
 
     private static string? GetString(JsonElement element, string propertyName)
@@ -188,5 +256,15 @@ public class CallbackForwarder : ILogForwarder
     public void Dispose()
     {
         _started = false;
+        _channel?.Writer.TryComplete();
+        _processingCts?.Cancel();
+        _processingCts?.Dispose();
     }
+
+    private sealed record CallbackMessage(
+        Action<CallbackMessage> Forward,
+        string Value1,
+        string Value2,
+        string? Value3,
+        string? Value4);
 }

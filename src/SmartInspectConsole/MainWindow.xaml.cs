@@ -32,7 +32,7 @@ public partial class MainWindow : Window
     {
         InitializeComponent();
         _viewModel = new MainViewModel();
-        _localApiHost = new LocalApiHost(_viewModel.Backend, _viewModel.LogMcpTrace);
+        _localApiHost = new LocalApiHost(_viewModel.Backend, _viewModel, _viewModel.LogMcpTrace);
         DataContext = _viewModel;
 
         // Restore full application state

@@ -8,10 +8,12 @@ namespace SmartInspectConsole.Services;
 internal sealed class SmartInspectMcpTools
 {
     private readonly ISmartInspectLogBackend _backend;
+    private readonly IRenderControl _renderControl;
 
-    public SmartInspectMcpTools(ISmartInspectLogBackend backend)
+    public SmartInspectMcpTools(ISmartInspectLogBackend backend, IRenderControl renderControl)
     {
         _backend = backend;
+        _renderControl = renderControl;
     }
 
     [McpServerTool]
@@ -26,6 +28,24 @@ internal sealed class SmartInspectMcpTools
     public LiveContextDto GetLiveContext()
     {
         return _backend.GetLiveContext();
+    }
+
+    [McpServerTool]
+    public RenderStateDto GetRenderState()
+    {
+        return _renderControl.GetRenderState();
+    }
+
+    [McpServerTool]
+    public RenderStateDto PauseRender()
+    {
+        return _renderControl.SetRenderPaused(true);
+    }
+
+    [McpServerTool]
+    public RenderStateDto ResumeRender()
+    {
+        return _renderControl.SetRenderPaused(false);
     }
 
     [McpServerTool]

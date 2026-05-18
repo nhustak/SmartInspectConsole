@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 using System.Net;
 using System.Net.Sockets;
 using System.Text;
+using System.Threading.Channels;
 using SmartInspectConsole.Core.Enums;
 using SmartInspectConsole.Core.Events;
 using SmartInspectConsole.Core.Packets;
@@ -23,7 +24,6 @@ public class SmartInspectTcpListener : IPacketListener
     private TcpListener? _listener;
     private CancellationTokenSource? _cts;
     private readonly ConcurrentDictionary<string, TcpClient> _clients = new();
-    private readonly BinaryPacketReader _packetReader = new();
     private int _clientCounter;
 
     public event EventHandler<PacketReceivedEventArgs>? PacketReceived;
@@ -105,6 +105,12 @@ public class SmartInspectTcpListener : IPacketListener
     private async Task HandleClientAsync(TcpClient client, string clientId, CancellationToken cancellationToken)
     {
         var clientBanner = string.Empty;
+        var packetChannel = Channel.CreateUnbounded<RawPacket>(new UnboundedChannelOptions
+        {
+            SingleReader = true,
+            SingleWriter = true
+        });
+        var packetProcessingTask = ProcessPacketsAsync(packetChannel.Reader, clientId, cancellationToken);
 
         try
         {
@@ -142,12 +148,7 @@ public class SmartInspectTcpListener : IPacketListener
                 await stream.WriteAsync(Acknowledgment, cancellationToken);
                 await stream.FlushAsync(cancellationToken);
 
-                // Parse packet
-                var packet = _packetReader.ParsePacket(packetType, payload);
-                if (packet != null)
-                {
-                    OnPacketReceived(new PacketReceivedEventArgs(packet, clientId));
-                }
+                packetChannel.Writer.TryWrite(new RawPacket(packetType, payload));
             }
         }
         catch (OperationCanceledException)
@@ -164,9 +165,36 @@ public class SmartInspectTcpListener : IPacketListener
         }
         finally
         {
+            packetChannel.Writer.TryComplete();
+            try { await packetProcessingTask.WaitAsync(TimeSpan.FromSeconds(2)); } catch { }
             _clients.TryRemove(clientId, out _);
             try { client.Close(); } catch { }
             OnClientDisconnected(new ClientEventArgs(clientId, clientBanner));
+        }
+    }
+
+    private async Task ProcessPacketsAsync(ChannelReader<RawPacket> reader, string clientId, CancellationToken cancellationToken)
+    {
+        var packetReader = new BinaryPacketReader();
+
+        try
+        {
+            await foreach (var rawPacket in reader.ReadAllAsync(cancellationToken))
+            {
+                var packet = packetReader.ParsePacket(rawPacket.Type, rawPacket.Payload);
+                if (packet != null)
+                {
+                    OnPacketReceived(new PacketReceivedEventArgs(packet, clientId));
+                }
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // Normal shutdown.
+        }
+        catch (Exception ex)
+        {
+            OnError(ex);
         }
     }
 
@@ -208,4 +236,6 @@ public class SmartInspectTcpListener : IPacketListener
         StopAsync().GetAwaiter().GetResult();
         _cts?.Dispose();
     }
+
+    private sealed record RawPacket(PacketType Type, byte[] Payload);
 }

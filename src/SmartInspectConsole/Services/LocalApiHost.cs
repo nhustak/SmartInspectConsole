@@ -18,12 +18,14 @@ namespace SmartInspectConsole.Services;
 public sealed class LocalApiHost : IAsyncDisposable
 {
     private readonly ISmartInspectLogBackend _backend;
+    private readonly IRenderControl _renderControl;
     private readonly Action<McpTraceEvent>? _traceSink;
     private WebApplication? _app;
 
-    public LocalApiHost(ISmartInspectLogBackend backend, Action<McpTraceEvent>? traceSink = null, int port = 42331)
+    public LocalApiHost(ISmartInspectLogBackend backend, IRenderControl renderControl, Action<McpTraceEvent>? traceSink = null, int port = 42331)
     {
         _backend = backend;
+        _renderControl = renderControl;
         _traceSink = traceSink;
         Port = port;
     }
@@ -51,6 +53,7 @@ public sealed class LocalApiHost : IAsyncDisposable
             options.SerializerOptions.WriteIndented = true;
         });
         builder.Services.AddSingleton(_backend);
+        builder.Services.AddSingleton(_renderControl);
         builder.Services.AddSingleton<SmartInspectMcpTools>();
         builder.Services
             .AddMcpServer()
@@ -139,6 +142,9 @@ public sealed class LocalApiHost : IAsyncDisposable
         });
 
         app.MapGet("/api/local/v1/context/live", () => Results.Ok(_backend.GetLiveContext()));
+        app.MapGet("/api/local/v1/render", () => Results.Ok(_renderControl.GetRenderState()));
+        app.MapPost("/api/local/v1/render/pause", () => Results.Ok(_renderControl.SetRenderPaused(true)));
+        app.MapPost("/api/local/v1/render/resume", () => Results.Ok(_renderControl.SetRenderPaused(false)));
 
         app.MapGet("/api/local/v1/flags", (string? category, int? limit) =>
             Results.Ok(_backend.ListFlaggedEntries(category, limit ?? 100)));

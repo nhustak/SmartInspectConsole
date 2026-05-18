@@ -10,6 +10,7 @@ using System.Windows.Input;
 using System.Windows.Threading;
 using Microsoft.Win32;
 using SmartInspectConsole.Backend;
+using SmartInspectConsole.Contracts;
 using SmartInspectConsole.Core.Enums;
 using SmartInspectConsole.Core.Events;
 using SmartInspectConsole.Core.FileIO;
@@ -26,7 +27,7 @@ namespace SmartInspectConsole.ViewModels;
 /// <summary>
 /// Main view model for the SmartInspect Console.
 /// </summary>
-public class MainViewModel : ViewModelBase, IDisposable
+public class MainViewModel : ViewModelBase, IRenderControl, IDisposable
 {
     private const string AllViewName = "All";
     private const string McpTraceViewName = "MCP Trace";
@@ -48,10 +49,11 @@ public class MainViewModel : ViewModelBase, IDisposable
     private const int MediumBatchSize = 1500;
     private const int HighBatchSize = 5000;
     private const int ImmediateDrainThreshold = 2000;
+    private const int DisplayPauseQueueThreshold = 1000;
     private const int MediumBacklogThreshold = 10000;
     private const int HighBacklogThreshold = 50000;
     private const int MaxPendingLogEntries = 100000;
-    private static readonly TimeSpan IdleDisplayPauseAfter = TimeSpan.FromMinutes(1);
+    private static readonly TimeSpan IdleDisplayPauseAfter = TimeSpan.FromMinutes(10);
     private const double TrimTargetRetentionRatio = 0.90;
 
     private DateTime? _lastLogEntryTimestamp;
@@ -80,6 +82,8 @@ public class MainViewModel : ViewModelBase, IDisposable
     private bool _isProcessingPendingItems;
     private bool _immediateDrainScheduled;
     private bool _displayUpdatesPaused;
+    private bool _isRenderPaused;
+    private bool _renderPauseWasAutomatic;
     private DateTime _lastUserActivityUtc = DateTime.UtcNow;
     private long _totalLogEntriesReceived;
     private long _totalLogEntriesRendered;
@@ -87,6 +91,9 @@ public class MainViewModel : ViewModelBase, IDisposable
     private long _totalWatchUpdatesRendered;
     private long _totalProcessFlowsRendered;
     private int _maxObservedLogQueueDepth;
+    private int _pendingLogEntryCount;
+    private int _pendingWatchCount;
+    private int _pendingProcessFlowCount;
     private BatchDiagnosticsSnapshot _diagnosticsSnapshot = new();
     private readonly object _pendingLogEntriesLock = new();
 
@@ -163,6 +170,7 @@ public class MainViewModel : ViewModelBase, IDisposable
         OpenLogFileCommand = new AsyncRelayCommand(OpenLogFileAsync);
         SaveLogFileCommand = new AsyncRelayCommand(SaveLogFileAsync, () => LogEntries.Count > 0);
         RunLoadTestCommand = new RelayCommand(RunLoadTest);
+        ToggleRenderPauseCommand = new RelayCommand(ToggleRenderPause);
 
         // Detail tab commands
         OpenLogEntryDetailCommand = new RelayCommand<LogEntry>(OpenLogEntryDetail);
@@ -235,6 +243,9 @@ public class MainViewModel : ViewModelBase, IDisposable
         _lastUserActivityUtc = DateTime.UtcNow;
 
         if (!_displayUpdatesPaused)
+            return;
+
+        if (_isRenderPaused)
             return;
 
         _displayUpdatesPaused = false;
@@ -408,6 +419,55 @@ public class MainViewModel : ViewModelBase, IDisposable
 
     public string FullTimestampDisplayFormat => TimeFormatSettings.FullTimestampFormat;
 
+    public bool IsRenderPaused
+    {
+        get => _isRenderPaused;
+        private set
+        {
+            if (!SetProperty(ref _isRenderPaused, value))
+                return;
+
+            OnPropertyChanged(nameof(RenderPauseButtonText));
+            OnPropertyChanged(nameof(RenderPauseToolTip));
+        }
+    }
+
+    public string RenderPauseButtonText => IsRenderPaused ? "Resume Render" : "Pause Render";
+
+    public string RenderPauseToolTip => IsRenderPaused
+        ? "Resume live rendering and refresh the retained log snapshot"
+        : "Pause visible row rendering while ingestion continues";
+
+    public RenderStateDto GetRenderState()
+    {
+        if (!Application.Current.Dispatcher.CheckAccess())
+        {
+            return Application.Current.Dispatcher.Invoke(GetRenderState);
+        }
+
+        return new RenderStateDto
+        {
+            IsRenderPaused = _isRenderPaused,
+            DisplayUpdatesPaused = _displayUpdatesPaused,
+            WasAutomatic = _renderPauseWasAutomatic,
+            VisibleLogEntryCount = LogEntries.Count,
+            MaxLogEntries = _maxLogEntries,
+            LogQueueDepth = Math.Max(0, Volatile.Read(ref _pendingLogEntryCount)),
+            StatusText = StatusText
+        };
+    }
+
+    public RenderStateDto SetRenderPaused(bool paused, bool automatic = false)
+    {
+        if (!Application.Current.Dispatcher.CheckAccess())
+        {
+            return Application.Current.Dispatcher.Invoke(() => SetRenderPaused(paused, automatic));
+        }
+
+        SetRenderPausedInternal(paused, automatic);
+        return GetRenderState();
+    }
+
     #endregion
 
     #region Commands
@@ -423,6 +483,7 @@ public class MainViewModel : ViewModelBase, IDisposable
     public ICommand OpenLogFileCommand { get; }
     public ICommand SaveLogFileCommand { get; }
     public ICommand RunLoadTestCommand { get; }
+    public ICommand ToggleRenderPauseCommand { get; }
 
     // Tab management
     public ICommand AddViewCommand { get; }
@@ -806,20 +867,17 @@ public class MainViewModel : ViewModelBase, IDisposable
         switch (e.Packet)
         {
             case LogEntry logEntry:
-                EnqueuePendingLogEntry(logEntry, e.ClientId);
+                var queueDepth = EnqueuePendingLogEntry(logEntry, e.ClientId);
                 Interlocked.Increment(ref _totalLogEntriesReceived);
-                UpdateQueueHighWaterMark(_pendingLogEntries.Count);
-                UpdateBackendQueueDepth();
+                UpdateQueueHighWaterMark(queueDepth);
                 break;
 
             case Watch watch:
-                _pendingWatches.Enqueue(watch);
-                UpdateBackendQueueDepth();
+                EnqueuePendingWatch(watch);
                 break;
 
             case ProcessFlow processFlow:
-                _pendingProcessFlows.Enqueue(processFlow);
-                UpdateBackendQueueDepth();
+                EnqueuePendingProcessFlow(processFlow);
                 break;
 
             case ControlCommand controlCommand:
@@ -850,6 +908,7 @@ public class MainViewModel : ViewModelBase, IDisposable
         var newHostNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var maxBatchSize = GetAdaptiveBatchSize();
         var logEntriesToAdd = new List<LogEntry>(maxBatchSize);
+        EnsureIdleRenderPause();
         var displayUpdatesPaused = ShouldPauseDisplayUpdates();
 
         try
@@ -862,6 +921,7 @@ public class MainViewModel : ViewModelBase, IDisposable
             // Process log entries in batch
             while (logEntriesProcessed < maxBatchSize && _pendingLogEntries.TryDequeue(out var pending))
             {
+                Interlocked.Decrement(ref _pendingLogEntryCount);
                 var logEntry = pending.LogEntry;
 
                 // Skip muted apps - discard before adding to collection
@@ -883,7 +943,8 @@ public class MainViewModel : ViewModelBase, IDisposable
                 _backend.AppendLogEntry(logEntry, pending.ClientId);
                 if (displayUpdatesPaused)
                 {
-                    DeferLogEntryForDisplay(pending);
+                    AccumulateConnectionUpdate(connectionUpdates, pending.ClientId, logEntry.AppName, logEntry.HostName);
+                    TrackAvailableFilterValues(logEntry, newAppNames, newSessions, newHostNames);
                 }
                 else
                 {
@@ -927,9 +988,6 @@ public class MainViewModel : ViewModelBase, IDisposable
                 {
                     var trimTarget = Math.Max(1000, (int)Math.Floor(_maxLogEntries * TrimTargetRetentionRatio));
                     var excess = LogEntries.Count - trimTarget;
-                    var entriesToTrim = LogEntries.Take(excess).ToList();
-                    _backend.RemoveLogEntries(entriesToTrim);
-
                     if (LogEntries is BulkObservableCollection<LogEntry> bulkLogEntries)
                     {
                         bulkLogEntries.RemoveFirstRange(excess);
@@ -945,6 +1003,7 @@ public class MainViewModel : ViewModelBase, IDisposable
             // Process watches in batch
             while (watchesProcessed < maxBatchSize && _pendingWatches.TryDequeue(out var watch))
             {
+                Interlocked.Decrement(ref _pendingWatchCount);
                 HandleWatch(watch);
                 watchesProcessed++;
             }
@@ -952,6 +1011,7 @@ public class MainViewModel : ViewModelBase, IDisposable
             // Process process flows in batch
             while (processFlowsProcessed < maxBatchSize && _pendingProcessFlows.TryDequeue(out var processFlow))
             {
+                Interlocked.Decrement(ref _pendingProcessFlowCount);
                 HandleProcessFlow(processFlow);
                 processFlowsProcessed++;
             }
@@ -975,9 +1035,10 @@ public class MainViewModel : ViewModelBase, IDisposable
             UpdateBackendQueueDepth();
             _isProcessingPendingItems = false;
 
-            if (_pendingLogEntries.Count >= ImmediateDrainThreshold ||
-                _pendingWatches.Count >= ImmediateDrainThreshold ||
-                _pendingProcessFlows.Count >= ImmediateDrainThreshold ||
+            var (logDepth, watchDepth, processFlowDepth) = GetPendingQueueDepths();
+            if (logDepth >= ImmediateDrainThreshold ||
+                watchDepth >= ImmediateDrainThreshold ||
+                processFlowDepth >= ImmediateDrainThreshold ||
                 (!_displayUpdatesPaused && _deferredDisplayLogEntries.Count > 0))
             {
                 ScheduleImmediateDrain();
@@ -2006,17 +2067,146 @@ public class MainViewModel : ViewModelBase, IDisposable
 
     private bool ShouldPauseDisplayUpdates()
     {
-        var shouldPause = DateTime.UtcNow - _lastUserActivityUtc >= IdleDisplayPauseAfter;
+        var shouldPause = _isRenderPaused ||
+            Volatile.Read(ref _pendingLogEntryCount) >= DisplayPauseQueueThreshold;
         if (shouldPause == _displayUpdatesPaused)
             return _displayUpdatesPaused;
 
         _displayUpdatesPaused = shouldPause;
-        if (_displayUpdatesPaused)
+        if (_isRenderPaused)
         {
-            StatusText = "Display updates paused while idle; ingestion continues";
+            StatusText = _renderPauseWasAutomatic
+                ? "Render paused after idle time; ingestion continues"
+                : "Render paused; ingestion continues";
+        }
+        else if (_displayUpdatesPaused)
+        {
+            StatusText = "Display updates paused under load; ingestion continues";
+        }
+        else
+        {
+            RefreshDisplayedLogEntriesFromBackend();
+            StatusText = "Live display resumed";
         }
 
         return _displayUpdatesPaused;
+    }
+
+    private void ToggleRenderPause()
+    {
+        SetRenderPausedInternal(!IsRenderPaused, false);
+    }
+
+    private void SetRenderPausedInternal(bool paused, bool automatic)
+    {
+        _renderPauseWasAutomatic = paused && automatic;
+        if (IsRenderPaused == paused)
+        {
+            if (!paused)
+                RefreshDisplayedLogEntriesFromBackend();
+
+            return;
+        }
+
+        IsRenderPaused = paused;
+        _displayUpdatesPaused = paused;
+
+        if (paused)
+        {
+            RefreshDisplayedLogEntriesFromBackend();
+            StatusText = automatic
+                ? "Render paused after idle time; ingestion continues"
+                : "Render paused; ingestion continues";
+            return;
+        }
+
+        RefreshDisplayedLogEntriesFromBackend();
+        StatusText = "Render resumed from retained history";
+        ScheduleImmediateDrain();
+    }
+
+    private void EnsureIdleRenderPause()
+    {
+        if (_isRenderPaused)
+            return;
+
+        if (DateTime.UtcNow - _lastUserActivityUtc >= IdleDisplayPauseAfter)
+        {
+            SetRenderPausedInternal(true, true);
+        }
+    }
+
+    private void RefreshDisplayedLogEntriesFromBackend()
+    {
+        var recentEntries = QueryRecentLogEntriesForDisplay();
+        lock (_logEntriesLock)
+        {
+            if (LogEntries is BulkObservableCollection<LogEntry> bulkLogEntries)
+            {
+                bulkLogEntries.ReplaceAll(recentEntries);
+            }
+            else
+            {
+                LogEntries.Clear();
+                foreach (var entry in recentEntries)
+                {
+                    LogEntries.Add(entry);
+                }
+            }
+        }
+
+        OnPropertyChanged(nameof(EntryCount));
+    }
+
+    private IReadOnlyList<LogEntry> QueryRecentLogEntriesForDisplay()
+    {
+        var items = new List<LogEntryDto>(Math.Min(_maxLogEntries, 1000));
+        string? cursor = null;
+
+        do
+        {
+            var response = _backend.QueryLogs(new LogQueryRequest
+            {
+                Cursor = cursor,
+                Limit = Math.Min(1000, _maxLogEntries - items.Count),
+                IncludeData = false
+            });
+
+            items.AddRange(response.Items);
+            cursor = response.NextCursor;
+
+            if (!response.HasMore || string.IsNullOrWhiteSpace(cursor) || items.Count >= _maxLogEntries)
+                break;
+        }
+        while (items.Count < _maxLogEntries);
+
+        return items
+            .OrderBy(item => item.Sequence)
+            .Select(ToLogEntry)
+            .ToList();
+    }
+
+    private static LogEntry ToLogEntry(LogEntryDto dto)
+    {
+        return new LogEntry
+        {
+            Timestamp = dto.TimestampUtc,
+            LogEntryType = Enum.TryParse<LogEntryType>(dto.Type, true, out var logEntryType)
+                ? logEntryType
+                : LogEntryType.Message,
+            ViewerId = Enum.TryParse<ViewerId>(dto.ViewerId, true, out var viewerId)
+                ? viewerId
+                : ViewerId.Title,
+            AppName = dto.AppName,
+            SessionName = dto.SessionName,
+            HostName = dto.HostName,
+            Title = dto.Title,
+            ProcessId = dto.ProcessId,
+            ThreadId = dto.ThreadId,
+            ElapsedTime = dto.ElapsedMs.HasValue
+                ? TimeSpan.FromMilliseconds(dto.ElapsedMs.Value)
+                : TimeSpan.Zero
+        };
     }
 
     private void DeferLogEntryForDisplay((LogEntry LogEntry, string ClientId) pending)
@@ -2052,7 +2242,7 @@ public class MainViewModel : ViewModelBase, IDisposable
 
     private int GetAdaptiveBatchSize()
     {
-        var logDepth = _pendingLogEntries.Count;
+        var logDepth = Volatile.Read(ref _pendingLogEntryCount);
         if (logDepth >= HighBacklogThreshold)
             return HighBatchSize;
 
@@ -2077,11 +2267,12 @@ public class MainViewModel : ViewModelBase, IDisposable
 
     private void UpdateDiagnostics(int lastBatchSize, double lastBatchDurationMs)
     {
+        var (logDepth, watchDepth, processFlowDepth) = GetPendingQueueDepths();
         DiagnosticsSnapshot = new BatchDiagnosticsSnapshot
         {
-            LogQueueDepth = _pendingLogEntries.Count,
-            WatchQueueDepth = _pendingWatches.Count,
-            ProcessFlowQueueDepth = _pendingProcessFlows.Count,
+            LogQueueDepth = logDepth,
+            WatchQueueDepth = watchDepth,
+            ProcessFlowQueueDepth = processFlowDepth,
             LastBatchSize = lastBatchSize,
             LastBatchDurationMs = lastBatchDurationMs,
             TotalLogEntriesReceived = Interlocked.Read(ref _totalLogEntriesReceived),
@@ -2096,24 +2287,45 @@ public class MainViewModel : ViewModelBase, IDisposable
         DiagnosticsText = DiagnosticsSnapshot.ToString();
     }
 
-    private void EnqueuePendingLogEntry(LogEntry logEntry, string clientId)
+    private int EnqueuePendingLogEntry(LogEntry logEntry, string clientId)
     {
         lock (_pendingLogEntriesLock)
         {
-            while (_pendingLogEntries.Count >= MaxPendingLogEntries &&
+            while (Volatile.Read(ref _pendingLogEntryCount) >= MaxPendingLogEntries &&
                    _pendingLogEntries.TryDequeue(out _))
             {
+                Interlocked.Decrement(ref _pendingLogEntryCount);
                 Interlocked.Increment(ref _totalLogEntriesDroppedFromPendingQueue);
             }
 
             _pendingLogEntries.Enqueue((logEntry, clientId));
+            return Interlocked.Increment(ref _pendingLogEntryCount);
         }
+    }
+
+    private void EnqueuePendingWatch(Watch watch)
+    {
+        _pendingWatches.Enqueue(watch);
+        Interlocked.Increment(ref _pendingWatchCount);
+    }
+
+    private void EnqueuePendingProcessFlow(ProcessFlow processFlow)
+    {
+        _pendingProcessFlows.Enqueue(processFlow);
+        Interlocked.Increment(ref _pendingProcessFlowCount);
     }
 
     private void UpdateBackendQueueDepth()
     {
-        _backend.SetQueueDepth(_pendingLogEntries.Count + _pendingWatches.Count + _pendingProcessFlows.Count);
+        var (logDepth, watchDepth, processFlowDepth) = GetPendingQueueDepths();
+        _backend.SetQueueDepth(logDepth + watchDepth + processFlowDepth);
     }
+
+    private (int LogDepth, int WatchDepth, int ProcessFlowDepth) GetPendingQueueDepths()
+        => (
+            Math.Max(0, Volatile.Read(ref _pendingLogEntryCount)),
+            Math.Max(0, Volatile.Read(ref _pendingWatchCount)),
+            Math.Max(0, Volatile.Read(ref _pendingProcessFlowCount)));
 
     private void UpdateBackendListenerStatuses()
     {

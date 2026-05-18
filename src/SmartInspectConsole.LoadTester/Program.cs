@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.IO.Pipes;
 using System.Net.Sockets;
@@ -35,7 +36,19 @@ internal static class Program
 
         try
         {
-            await Task.WhenAll(workers.Append(reporter));
+            await Task.WhenAll(workers);
+            cts.Cancel();
+            try
+            {
+                await reporter;
+            }
+            catch (OperationCanceledException)
+            {
+                // Expected when exact message-count runs finish before the duration timer.
+            }
+
+            Console.WriteLine();
+            Console.WriteLine($"Final latency: {stats.GetLatencySummary()}");
             return 0;
         }
         catch (OperationCanceledException)
@@ -93,7 +106,8 @@ internal static class Program
                 $"send log header client {clientNumber}",
                 cancellationToken);
 
-            while (!cancellationToken.IsCancellationRequested)
+            while (!cancellationToken.IsCancellationRequested &&
+                   (options.MessagesPerClient <= 0 || sentLogs < options.MessagesPerClient))
             {
                 RefillTokens(options, ref tokens, ref lastRefill, stopwatch.Elapsed);
                 if (options.MessagesPerSecond > 0 && tokens < 1)
@@ -123,12 +137,14 @@ internal static class Program
                     Color = PickColor(entryType)
                 };
 
+                var sendStopwatch = Stopwatch.StartNew();
                 await ExecuteWithTimeoutAsync(
                     token => connection.SendPacketAsync(writer, packet, token),
                     options.OperationTimeout,
                     $"send log packet client {clientNumber}",
                     cancellationToken);
-                stats.RecordLog(payload.Length);
+                sendStopwatch.Stop();
+                stats.RecordLog(payload.Length, sendStopwatch.Elapsed.TotalMilliseconds);
 
                 if (sentLogs >= nextWatchAt)
                 {
@@ -237,7 +253,7 @@ internal static class Program
             Console.Write(
                 $"\r{DateTime.Now:HH:mm:ss} | {options.Transport,-4} | clients {options.Clients,2} | " +
                 $"logs {stats.LogEntriesSent,12:N0} | watches {stats.WatchesSent,10:N0} | flows {stats.ProcessFlowsSent,10:N0} | " +
-                $"payload {stats.BytesSent / 1024.0 / 1024.0,8:F1} MiB");
+                $"payload {stats.BytesSent / 1024.0 / 1024.0,8:F1} MiB | {stats.GetLatencySummary()}");
         }
     }
 
@@ -300,6 +316,7 @@ internal sealed class LoadTestOptions
           --pipe <name>               Named pipe name. Default: smartinspect
           --clients <number>          Concurrent clients. Default: 4
           --messages-per-second <n>   Per-client log rate. 0 = unthrottled. Default: 1000
+          --messages-per-client <n>   Exact number of log messages per client. 0 = run by duration. Default: 0
           --payload-bytes <n>         Approximate bytes in each log payload. Default: 512
           --duration-seconds <n>      Test duration in seconds. Default: 300
           --connect-timeout-seconds <n>
@@ -323,6 +340,7 @@ internal sealed class LoadTestOptions
     public string PipeName { get; init; } = "smartinspect";
     public int Clients { get; init; } = 4;
     public int MessagesPerSecond { get; init; } = 1000;
+    public int MessagesPerClient { get; init; }
     public int PayloadBytes { get; init; } = 512;
     public TimeSpan Duration { get; init; } = TimeSpan.FromMinutes(5);
     public TimeSpan ConnectTimeout { get; init; } = TimeSpan.FromSeconds(15);
@@ -364,6 +382,7 @@ internal sealed class LoadTestOptions
             PipeName = GetValue(values, "pipe", "smartinspect"),
             Clients = ParseInt(GetValue(values, "clients", "4"), "clients", 1),
             MessagesPerSecond = ParseInt(GetValue(values, "messages-per-second", "1000"), "messages-per-second", 0),
+            MessagesPerClient = ParseInt(GetValue(values, "messages-per-client", "0"), "messages-per-client", 0),
             PayloadBytes = ParseInt(GetValue(values, "payload-bytes", "512"), "payload-bytes", 0),
             Duration = TimeSpan.FromSeconds(ParseInt(GetValue(values, "duration-seconds", "300"), "duration-seconds", 1)),
             ConnectTimeout = ParseTimeoutSeconds(GetValue(values, "connect-timeout-seconds", "15"), "connect-timeout-seconds"),
@@ -407,21 +426,91 @@ internal sealed class LoadTestStats
     private long _watchesSent;
     private long _processFlowsSent;
     private long _bytesSent;
+    private long _latencySampleCount;
+    private double _latencyTotalMs;
+    private double _latencyMaxMs;
+    private long _latencyOver50Ms;
+    private long _latencyOver100Ms;
+    private long _latencyOver250Ms;
+    private long _latencyOver1000Ms;
+    private readonly ConcurrentQueue<double> _latencySamples = new();
 
     public long LogEntriesSent => Interlocked.Read(ref _logEntriesSent);
     public long WatchesSent => Interlocked.Read(ref _watchesSent);
     public long ProcessFlowsSent => Interlocked.Read(ref _processFlowsSent);
     public long BytesSent => Interlocked.Read(ref _bytesSent);
 
-    public void RecordLog(int bytes)
+    public void RecordLog(int bytes, double latencyMs)
     {
         Interlocked.Increment(ref _logEntriesSent);
         Interlocked.Add(ref _bytesSent, bytes);
+        RecordLatency(latencyMs);
     }
 
     public void RecordWatch() => Interlocked.Increment(ref _watchesSent);
 
     public void RecordProcessFlow() => Interlocked.Increment(ref _processFlowsSent);
+
+    public string GetLatencySummary()
+    {
+        var samples = _latencySamples.ToArray();
+        if (samples.Length == 0)
+            return "lat ms avg/p95/p99/max 0.0/0.0/0.0/0.0 >100ms 0 >1s 0";
+
+        Array.Sort(samples);
+        var avg = Volatile.Read(ref _latencyTotalMs) / Math.Max(1, Interlocked.Read(ref _latencySampleCount));
+        var p95 = Percentile(samples, 0.95);
+        var p99 = Percentile(samples, 0.99);
+        var max = Volatile.Read(ref _latencyMaxMs);
+        return $"lat ms avg/p95/p99/max {avg:F1}/{p95:F1}/{p99:F1}/{max:F1} " +
+               $">50ms {Interlocked.Read(ref _latencyOver50Ms):N0} " +
+               $">100ms {Interlocked.Read(ref _latencyOver100Ms):N0} " +
+               $">250ms {Interlocked.Read(ref _latencyOver250Ms):N0} " +
+               $">1s {Interlocked.Read(ref _latencyOver1000Ms):N0}";
+    }
+
+    private void RecordLatency(double latencyMs)
+    {
+        _latencySamples.Enqueue(latencyMs);
+        Interlocked.Increment(ref _latencySampleCount);
+
+        double initialTotal;
+        double computedTotal;
+        do
+        {
+            initialTotal = Volatile.Read(ref _latencyTotalMs);
+            computedTotal = initialTotal + latencyMs;
+        }
+        while (Interlocked.CompareExchange(ref _latencyTotalMs, computedTotal, initialTotal) != initialTotal);
+
+        double observedMax;
+        do
+        {
+            observedMax = Volatile.Read(ref _latencyMaxMs);
+            if (latencyMs <= observedMax)
+                break;
+        }
+        while (Interlocked.CompareExchange(ref _latencyMaxMs, latencyMs, observedMax) != observedMax);
+
+        if (latencyMs > 50)
+            Interlocked.Increment(ref _latencyOver50Ms);
+        if (latencyMs > 100)
+            Interlocked.Increment(ref _latencyOver100Ms);
+        if (latencyMs > 250)
+            Interlocked.Increment(ref _latencyOver250Ms);
+        if (latencyMs > 1000)
+            Interlocked.Increment(ref _latencyOver1000Ms);
+    }
+
+    private static double Percentile(double[] sortedSamples, double percentile)
+    {
+        if (sortedSamples.Length == 0)
+            return 0;
+
+        var index = (int)Math.Ceiling(percentile * sortedSamples.Length) - 1;
+        index = Math.Clamp(index, 0, sortedSamples.Length - 1);
+        return sortedSamples[index];
+    }
 }
 
 internal abstract class LoadTestConnection : IAsyncDisposable
