@@ -10,6 +10,7 @@
 
 ## Local workflow
 - For any change in this repository, always increment the application version by one revision (`x.y.z.n` -> `x.y.z.(n+1)`) before responding.
+- Never edit `SmartInspectConsole.aip` unless the user explicitly asks to modify that exact file in the current turn. Version bumps, publish work, packaging work, installer discussion, or broad "commit all" / "publish" requests do not imply permission to touch the `.aip` file.
 - If a change directly affects the application UI, runtime behavior, listener behavior, commands, packaging, or any shipped app output, always shut down any currently running `SmartInspectConsole` process, build, and start the updated app before responding.
 - If a change does not directly affect the shipped app, do not stop, build, or restart the app unless the user explicitly asks for it.
 - Do not wait for a separate reminder. Treat this as the default development cycle for this repository unless the user explicitly says otherwise.

@@ -8,7 +8,7 @@
     <ROW Property="ARPCOMMENTS" Value="This installer database contains the logic and data required to install [|ProductName]." ValueLocId="*"/>
     <ROW Property="ARPNOREPAIR" MultiBuildValue="DefaultBuild:1"/>
     <ROW Property="Manufacturer" Value="Tangent Technologies, LLC"/>
-    <ROW Property="ProductCode" Value="1033:{BD528118-1C11-4C88-8363-D2DC44ED0C0C} " Type="16"/>
+    <ROW Property="ProductCode" Value="1033:{199347AD-65E6-4314-B921-037FBED85798} " Type="16"/>
     <ROW Property="ProductLanguage" Value="1033"/>
     <ROW Property="ProductName" Value="SmartInspectConsole"/>
     <ROW Property="ProductVersion" Value="1.0.1.14" Options="32"/>
