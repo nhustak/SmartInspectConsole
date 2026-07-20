@@ -44,7 +44,9 @@ public class PipeListenerConcurrencyTests
         _output.WriteLine($"test app prefix: {appNamePrefix}");
         _output.WriteLine($"clientCount={clientCount} packetsPerClient={packetsPerClient}");
 
-        var subprocesses = await RunSubprocessClientsAsync(clientCount, packetsPerClient, appNamePrefix);
+        var wall = Stopwatch.StartNew();
+        var subprocesses = await RunSubprocessClientsAsync(clientCount, packetsPerClient, appNamePrefix, overallTimeoutMs: 60_000);
+        wall.Stop();
         var afterContext = await mcp.GetLiveContextAsync();
         var packetsByAppName = await WaitForExpectedLogsAsync(mcp, expectedAppNames, packetsPerClient);
 
@@ -53,6 +55,11 @@ public class PipeListenerConcurrencyTests
         {
             if (proc.ExitCode != 0)
                 failures.Add($"client-{proc.ClientId}: exit code {proc.ExitCode}; stderr={Truncate(proc.StdErr, 700)}; stdout={Truncate(proc.StdOut, 700)}");
+            if (proc.StdErr.Contains("TimeoutException", StringComparison.OrdinalIgnoreCase) ||
+                proc.StdErr.Contains("timed out", StringComparison.OrdinalIgnoreCase))
+            {
+                failures.Add($"client-{proc.ClientId}: TIMEOUT — possible console drain stall / lock-up ({Truncate(proc.StdErr, 300)})");
+            }
         }
 
         var actualAppNames = packetsByAppName.Keys.ToHashSet(StringComparer.Ordinal);
@@ -66,6 +73,7 @@ public class PipeListenerConcurrencyTests
         ValidatePackets(expectedAppNames, packetsByAppName, packetsPerClient, failures);
 
         _output.WriteLine($"subprocesses launched: {subprocesses.Count}; exit-0: {subprocesses.Count(p => p.ExitCode == 0)}");
+        _output.WriteLine($"wall time: {wall.Elapsed.TotalSeconds:F1}s");
         _output.WriteLine($"distinct AppNames received via MCP: {packetsByAppName.Count}");
         _output.WriteLine($"total LogEntry packets received via MCP: {packetsByAppName.Values.Sum(q => q.Count)}");
         _output.WriteLine($"before live context: {JsonSerializer.Serialize(beforeContext, JsonOptions)}");
@@ -80,6 +88,67 @@ public class PipeListenerConcurrencyTests
             report.AppendLine($"  - MCP live context after run: {JsonSerializer.Serialize(afterContext, JsonOptions)}");
             _output.WriteLine(report.ToString());
             Assert.Fail(report.ToString());
+        }
+    }
+
+    /// <summary>
+    /// Lock-up regression: many concurrent clients with larger payloads while UI render is paused.
+    /// If the console stops draining the pipe under backlog, clients hang and exit non-zero / timeout.
+    /// </summary>
+    [Fact]
+    public async Task LiveConsoleConcurrentClients_DoNotHangWhileRenderPaused()
+    {
+        await using var mcp = await LiveConsoleMcpClient.ConnectAsync();
+        AssertLivePipeReady(await mcp.GetLiveContextAsync());
+
+        const int clientCount = 12;
+        const int packetsPerClient = 150;
+        var runId = Guid.NewGuid().ToString("N");
+        var appNamePrefix = $"pipe-lockup-{runId}";
+        var expectedAppNames = Enumerable.Range(1, clientCount)
+            .Select(i => $"{appNamePrefix}-client-{i}")
+            .ToHashSet(StringComparer.Ordinal);
+
+        try
+        {
+            var paused = await mcp.PauseRenderAsync();
+            Assert.True(paused.IsRenderPaused);
+
+            var wall = Stopwatch.StartNew();
+            // Tight overall budget: hang on write would blow this.
+            var subprocesses = await RunSubprocessClientsAsync(
+                clientCount,
+                packetsPerClient,
+                appNamePrefix,
+                overallTimeoutMs: 45_000,
+                payloadBytes: 2048);
+            wall.Stop();
+
+            var failures = new List<string>();
+            foreach (var proc in subprocesses)
+            {
+                if (proc.ExitCode != 0)
+                    failures.Add($"client-{proc.ClientId}: exit {proc.ExitCode}; {Truncate(proc.StdErr, 500)}");
+                if (proc.StdErr.Contains("Timeout", StringComparison.OrdinalIgnoreCase))
+                    failures.Add($"client-{proc.ClientId}: timeout while render paused (drain stall)");
+            }
+
+            if (wall.Elapsed > TimeSpan.FromSeconds(40))
+                failures.Add($"wall time {wall.Elapsed.TotalSeconds:F1}s too high under paused render — possible lock-up");
+
+            var packetsByAppName = await WaitForExpectedLogsAsync(mcp, expectedAppNames, packetsPerClient);
+            var missing = expectedAppNames.Where(a => !packetsByAppName.TryGetValue(a, out var q) || q.Count < packetsPerClient * 0.8).ToList();
+            if (missing.Count > 0)
+                failures.Add($"insufficient packets under paused render for: {string.Join(", ", missing.Take(8))}");
+
+            _output.WriteLine($"lock-up test wall={wall.Elapsed.TotalSeconds:F1}s exit0={subprocesses.Count(p => p.ExitCode == 0)}/{clientCount}");
+
+            if (failures.Count > 0)
+                Assert.Fail(string.Join(Environment.NewLine, failures));
+        }
+        finally
+        {
+            await mcp.ResumeRenderAsync();
         }
     }
 
@@ -127,7 +196,9 @@ public class PipeListenerConcurrencyTests
     private async Task<IReadOnlyList<SubprocessResult>> RunSubprocessClientsAsync(
         int clientCount,
         int packetsPerClient,
-        string appNamePrefix)
+        string appNamePrefix,
+        int overallTimeoutMs = 60_000,
+        int payloadBytes = 0)
     {
         var clientExePath = ResolveClientExe();
         _output.WriteLine($"PipeTestClient exe: {clientExePath}");
@@ -155,7 +226,12 @@ public class PipeListenerConcurrencyTests
             psi.ArgumentList.Add("--connect-timeout-ms");
             psi.ArgumentList.Add("15000");
             psi.ArgumentList.Add("--overall-timeout-ms");
-            psi.ArgumentList.Add("60000");
+            psi.ArgumentList.Add(overallTimeoutMs.ToString());
+            if (payloadBytes > 0)
+            {
+                psi.ArgumentList.Add("--payload-bytes");
+                psi.ArgumentList.Add(payloadBytes.ToString());
+            }
 
             var proc = Process.Start(psi)
                 ?? throw new InvalidOperationException($"Failed to start client-{clientId}");
@@ -170,8 +246,9 @@ public class PipeListenerConcurrencyTests
             return (StdOut: await stdoutTask, StdErr: await stderrTask);
         })).ToArray();
 
+        var killAfter = TimeSpan.FromMilliseconds(overallTimeoutMs + 15_000);
         var allDone = Task.WhenAll(ioTasks);
-        var completed = await Task.WhenAny(allDone, Task.Delay(TimeSpan.FromSeconds(70)));
+        var completed = await Task.WhenAny(allDone, Task.Delay(killAfter));
         if (completed != allDone)
         {
             foreach (var p in processes)

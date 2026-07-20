@@ -27,9 +27,26 @@ public class BinaryPacketWriter
     }
 
     /// <summary>
+    /// Asynchronously writes a complete packet so callers can enforce send timeouts
+    /// (critical for detecting console-side drain stalls / client lock-ups).
+    /// </summary>
+    public async Task WritePacketAsync(Stream stream, Packet packet, CancellationToken cancellationToken = default)
+    {
+        var payload = SerializePayload(packet);
+        var header = BuildPacketHeader(packet.PacketType, payload.Length);
+        await stream.WriteAsync(header, cancellationToken);
+        await stream.WriteAsync(payload, cancellationToken);
+    }
+
+    /// <summary>
     /// Writes the 6-byte packet header (2-byte type + 4-byte size).
     /// </summary>
     private static void WritePacketHeader(Stream stream, PacketType type, int payloadSize)
+    {
+        stream.Write(BuildPacketHeader(type, payloadSize));
+    }
+
+    private static byte[] BuildPacketHeader(PacketType type, int payloadSize)
     {
         var header = new byte[Packet.HeaderSize];
         var typeValue = (short)type;
@@ -39,7 +56,7 @@ public class BinaryPacketWriter
         header[3] = (byte)((payloadSize >> 8) & 0xFF);
         header[4] = (byte)((payloadSize >> 16) & 0xFF);
         header[5] = (byte)((payloadSize >> 24) & 0xFF);
-        stream.Write(header);
+        return header;
     }
 
     /// <summary>

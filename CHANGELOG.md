@@ -2,6 +2,15 @@
 
 All notable changes to SmartInspect Console are documented here.
 
+## 1.0.1.19 — 2026-07-20
+
+### Tests
+
+- Added **in-process** `SmartInspectConsole.Core.Tests` lock-up suite: concurrent pipe/TCP writers with slow consumers, half-open banner client, burst flood, same-AppName multi-client.
+- Extended live pipe integration tests with **render-paused concurrent flood** and explicit timeout/drain-stall failure detection.
+- `PipeTestClient` supports `--payload-bytes` and `--send-timeout-ms` and reports `maxSendMs`.
+- `BinaryPacketWriter.WritePacketAsync` for cancellable sends in tests and tools.
+
 ## 1.0.1.18 — 2026-07-20
 
 ### UI
