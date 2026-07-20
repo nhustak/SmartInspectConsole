@@ -1132,24 +1132,24 @@ public class MainViewModel : ViewModelBase, IRenderControl, IDisposable
         var hostName = header.HostName ?? "Unknown";
         var muteKey = $"{appName}@{hostName}";
 
-        // Check if this client already has a visible connection (shouldn't normally)
+        // Track one visible row per transport clientId. Concurrent clients that share the same
+        // AppName@HostName must remain separate; only merge a disconnected reconnect stub.
         _connectionsByClientId.TryGetValue(clientId, out var connection);
         var transport = GetTransportName(clientId);
 
-        // Check if there's already a connection with this app+host identity (reconnect case)
-        var existing = ConnectedApplications.FirstOrDefault(c =>
-            c != connection && c.MuteKey == muteKey);
+        var disconnectedExisting = ConnectedApplications.FirstOrDefault(c =>
+            c != connection &&
+            !c.IsConnected &&
+            c.MuteKey == muteKey);
 
-        if (existing != null)
+        if (disconnectedExisting != null)
         {
             if (connection != null)
-            {
-                // Both exist — merge old into new
-                connection.MessageCount += existing.MessageCount;
-            }
-            existing.PropertyChanged -= OnConnectionPropertyChanged;
-            _connectionsByClientId.Remove(existing.ClientId);
-            ConnectedApplications.Remove(existing);
+                connection.MessageCount += disconnectedExisting.MessageCount;
+
+            disconnectedExisting.PropertyChanged -= OnConnectionPropertyChanged;
+            _connectionsByClientId.Remove(disconnectedExisting.ClientId);
+            ConnectedApplications.Remove(disconnectedExisting);
         }
 
         if (connection == null)
@@ -1165,14 +1165,14 @@ public class MainViewModel : ViewModelBase, IRenderControl, IDisposable
             _connectionsByClientId[clientId] = connection;
             ConnectedApplications.Add(connection);
 
-            // Transfer message count from existing entry if we merged
-            if (existing != null)
-                connection.MessageCount = existing.MessageCount;
+            if (disconnectedExisting != null)
+                connection.MessageCount = disconnectedExisting.MessageCount;
         }
 
         connection.AppName = appName;
         connection.HostName = hostName;
         connection.Transport = transport;
+        connection.IsConnected = true;
         connection.IsMuted = _mutedApps.Contains(muteKey);
 
         StatusText = $"Client connected: {appName} @ {hostName}";
@@ -1322,9 +1322,31 @@ public class MainViewModel : ViewModelBase, IRenderControl, IDisposable
         var hostName = string.IsNullOrWhiteSpace(update.HostName) ? "Unknown" : update.HostName;
         var muteKey = $"{appName}@{hostName}";
 
-        var connection = ConnectedApplications.FirstOrDefault(c =>
-            string.Equals(c.AppName, appName, StringComparison.OrdinalIgnoreCase) &&
-            string.Equals(c.HostName, hostName, StringComparison.OrdinalIgnoreCase));
+        ConnectedApplication? connection = null;
+
+        // Prefer the transport clientId so concurrent same-named apps stay separate.
+        if (!string.IsNullOrWhiteSpace(update.ClientId) &&
+            _connectionsByClientId.TryGetValue(update.ClientId, out var byClientId) &&
+            byClientId != null)
+        {
+            connection = byClientId;
+        }
+        else if (!string.IsNullOrWhiteSpace(update.ClientId))
+        {
+            connection = ConnectedApplications.FirstOrDefault(c =>
+                string.Equals(c.ClientId, update.ClientId, StringComparison.Ordinal));
+        }
+        else
+        {
+            // Unidentified traffic only: fall back to app@host, preferring a disconnected stub.
+            connection = ConnectedApplications.FirstOrDefault(c =>
+                !c.IsConnected &&
+                string.Equals(c.AppName, appName, StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(c.HostName, hostName, StringComparison.OrdinalIgnoreCase))
+                ?? ConnectedApplications.FirstOrDefault(c =>
+                    string.Equals(c.AppName, appName, StringComparison.OrdinalIgnoreCase) &&
+                    string.Equals(c.HostName, hostName, StringComparison.OrdinalIgnoreCase));
+        }
 
         if (connection == null)
         {
@@ -1345,6 +1367,13 @@ public class MainViewModel : ViewModelBase, IRenderControl, IDisposable
         {
             connection.ClientId = update.ClientId;
             connection.Transport = GetTransportName(update.ClientId);
+        }
+
+        if (!string.IsNullOrWhiteSpace(update.AppName) &&
+            !string.Equals(connection.AppName, update.AppName, StringComparison.Ordinal))
+        {
+            connection.AppName = appName;
+            connection.HostName = hostName;
         }
 
         connection.MessageCount += update.MessageCount;

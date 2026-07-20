@@ -1,6 +1,6 @@
-# SmartInspect Console v1.0.1.14
+# SmartInspect Console v1.0.1.18
 
-Last updated: 2026-03-26
+Last updated: 2026-07-20
 
 A modern Windows console for SmartInspect logs with live filtering, multi-view analysis, browser ingestion, and production-grade load handling.
 

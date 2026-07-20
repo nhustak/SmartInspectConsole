@@ -1,0 +1,10 @@
+# Local FTP secrets (templates are committed if/when you choose to)
+secrets/deploy.c.json
+secrets/deploy.g.json
+
+# Cake restore / tools
+_internal/tools/
+_internal/.config/.store/
+
+# Build output
+artifacts/

@@ -41,14 +41,24 @@ public class BinaryPacketReader
     }
 
     /// <summary>
+    /// Hard upper bound for a single packet payload. Larger values are treated as corrupt
+    /// so a bad header cannot force multi-GB allocations that stall the process.
+    /// </summary>
+    public const int MaxPacketPayloadSize = 16 * 1024 * 1024;
+
+    /// <summary>
     /// Reads a packet header from the stream.
     /// </summary>
     /// <param name="stream">The stream to read from.</param>
+    /// <param name="cancellationToken">Cancellation token for the read.</param>
     /// <returns>A tuple of (PacketType, PayloadSize), or null if end of stream.</returns>
-    public static async Task<(PacketType Type, int Size)?> ReadPacketHeaderAsync(Stream stream)
+    /// <exception cref="InvalidDataException">Thrown when the declared payload size is invalid.</exception>
+    public static async Task<(PacketType Type, int Size)?> ReadPacketHeaderAsync(
+        Stream stream,
+        CancellationToken cancellationToken = default)
     {
         var header = new byte[Packet.HeaderSize];
-        var bytesRead = await ReadExactlyAsync(stream, header, Packet.HeaderSize);
+        var bytesRead = await ReadExactlyAsync(stream, header, Packet.HeaderSize, cancellationToken);
 
         if (bytesRead < Packet.HeaderSize)
             return null;
@@ -56,18 +66,25 @@ public class BinaryPacketReader
         var packetType = (PacketType)(header[0] | header[1] << 8);
         var size = header[2] | header[3] << 8 | header[4] << 16 | header[5] << 24;
 
+        if (size < 0 || size > MaxPacketPayloadSize)
+            throw new InvalidDataException($"Invalid SmartInspect packet size: {size}.");
+
         return (packetType, size);
     }
 
     /// <summary>
     /// Reads exactly the specified number of bytes from the stream.
     /// </summary>
-    public static async Task<int> ReadExactlyAsync(Stream stream, byte[] buffer, int count)
+    public static async Task<int> ReadExactlyAsync(
+        Stream stream,
+        byte[] buffer,
+        int count,
+        CancellationToken cancellationToken = default)
     {
         var totalRead = 0;
         while (totalRead < count)
         {
-            var read = await stream.ReadAsync(buffer.AsMemory(totalRead, count - totalRead));
+            var read = await stream.ReadAsync(buffer.AsMemory(totalRead, count - totalRead), cancellationToken);
             if (read == 0)
                 break;
             totalRead += read;

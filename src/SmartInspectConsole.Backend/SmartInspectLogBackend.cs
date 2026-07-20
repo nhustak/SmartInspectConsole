@@ -149,9 +149,13 @@ public sealed class SmartInspectLogBackend : ISmartInspectLogBackend
     {
         lock (_sync)
         {
-            if (_applicationsByKey.TryGetValue(applicationKey, out var application))
+            // Mute is by AppName@HostName group, so apply to every concurrent instance.
+            foreach (var application in _applicationsByClientId.Values)
             {
-                application.IsMuted = isMuted;
+                if (string.Equals(application.ApplicationKey, applicationKey, StringComparison.OrdinalIgnoreCase))
+                {
+                    application.IsMuted = isMuted;
+                }
             }
         }
     }
@@ -273,11 +277,13 @@ public sealed class SmartInspectLogBackend : ISmartInspectLogBackend
     {
         lock (_sync)
         {
-            return _applicationsByKey.Values
+            // One summary per transport clientId so concurrent same-named apps are all visible.
+            return _applicationsByClientId.Values
                 .Where(app => !connectedOnly || app.IsConnected)
                 .Where(app => !mutedOnly || app.IsMuted)
                 .OrderBy(app => app.AppName, StringComparer.OrdinalIgnoreCase)
                 .ThenBy(app => app.HostName, StringComparer.OrdinalIgnoreCase)
+                .ThenBy(app => app.ClientId, StringComparer.OrdinalIgnoreCase)
                 .Select(app => new ApplicationSummaryDto
                 {
                     ClientId = app.ClientId,
@@ -317,7 +323,7 @@ public sealed class SmartInspectLogBackend : ISmartInspectLogBackend
                 LogEntryCount = _entries.Count,
                 WatchCount = _watchesByName.Count,
                 ProcessFlowCount = _processFlows.Count,
-                ConnectedApplicationCount = _applicationsByKey.Values.Count(app => app.IsConnected),
+                ConnectedApplicationCount = _applicationsByClientId.Values.Count(app => app.IsConnected),
                 MaxLogEntries = _maxLogEntries,
                 QueueDepth = _queueDepth,
                 LastEntryUtc = _lastEntryUtc,
@@ -595,11 +601,21 @@ public sealed class SmartInspectLogBackend : ISmartInspectLogBackend
             return existingByClient;
         }
 
-        if (_applicationsByKey.TryGetValue(applicationKey, out var existingByKey))
+        // Only reuse a prior AppName@HostName row when that instance is already disconnected
+        // (reconnect). Concurrent clients with the same app name must stay separate rows.
+        if (_applicationsByKey.TryGetValue(applicationKey, out var existingByKey) &&
+            !existingByKey.IsConnected)
         {
+            _applicationsByClientId.Remove(existingByKey.ClientId);
             existingByKey.ClientId = clientId;
+            existingByKey.AppName = normalizedAppName;
+            existingByKey.HostName = normalizedHostName;
+            existingByKey.ApplicationKey = applicationKey;
+            existingByKey.IsConnected = true;
             existingByKey.ConnectedAtUtc ??= DateTime.UtcNow;
+            existingByKey.DisconnectedAtUtc = null;
             _applicationsByClientId[clientId] = existingByKey;
+            _applicationsByKey[applicationKey] = existingByKey;
             return existingByKey;
         }
 
@@ -614,6 +630,7 @@ public sealed class SmartInspectLogBackend : ISmartInspectLogBackend
         };
 
         _applicationsByClientId[clientId] = application;
+        // Keep a representative for mute-key lookups; concurrent instances are listed by clientId.
         _applicationsByKey[applicationKey] = application;
         return application;
     }

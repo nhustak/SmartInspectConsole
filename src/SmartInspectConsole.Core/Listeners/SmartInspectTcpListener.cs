@@ -12,19 +12,31 @@ namespace SmartInspectConsole.Core.Listeners;
 
 /// <summary>
 /// TCP listener for receiving SmartInspect packets.
+/// ACK is sent before parse/UI work so client logging is not blocked by console rendering.
+/// Handshake and idle timeouts force disconnect so half-open clients cannot hang forever.
 /// </summary>
 public class SmartInspectTcpListener : IPacketListener
 {
     public const int DefaultPort = 4228;
     private const string ServerBanner = "SmartInspect Console v1.0\n";
-    private const int AnswerSize = 2;
     private static readonly byte[] Acknowledgment = [0, 0];
+    private const int MaxPendingPacketsPerClient = 4096;
+    private const int MaxClientBannerLength = 4096;
+    private static readonly TimeSpan HandshakeTimeout = TimeSpan.FromSeconds(5);
+    /// <summary>
+    /// Once a packet header is received, the payload must finish within this window.
+    /// Waiting for the *next* packet has no idle timeout — quiet clients must stay connected.
+    /// </summary>
+    private static readonly TimeSpan PacketPayloadTimeout = TimeSpan.FromSeconds(30);
+    private static readonly TimeSpan AckWriteTimeout = TimeSpan.FromSeconds(5);
 
     private readonly int _port;
     private TcpListener? _listener;
     private CancellationTokenSource? _cts;
     private readonly ConcurrentDictionary<string, TcpClient> _clients = new();
     private int _clientCounter;
+    private long _totalPacketsDropped;
+    private string? _lastError;
 
     public event EventHandler<PacketReceivedEventArgs>? PacketReceived;
     public event EventHandler<ClientEventArgs>? ClientConnected;
@@ -37,6 +49,8 @@ public class SmartInspectTcpListener : IPacketListener
     /// Gets the number of connected clients.
     /// </summary>
     public int ClientCount => _clients.Count;
+    public long TotalPacketsDropped => Interlocked.Read(ref _totalPacketsDropped);
+    public string? LastError => _lastError;
 
     public SmartInspectTcpListener(int port = DefaultPort)
     {
@@ -65,7 +79,7 @@ public class SmartInspectTcpListener : IPacketListener
         IsListening = false;
         _cts?.Cancel();
 
-        // Close all client connections
+        // Close all client connections immediately so client apps unblock on write/ACK.
         foreach (var client in _clients.Values)
         {
             try { client.Close(); } catch { }
@@ -85,6 +99,7 @@ public class SmartInspectTcpListener : IPacketListener
             try
             {
                 var client = await _listener.AcceptTcpClientAsync(cancellationToken);
+                client.NoDelay = true;
                 var clientId = $"tcp-{Interlocked.Increment(ref _clientCounter)}";
                 _clients[clientId] = client;
 
@@ -105,55 +120,73 @@ public class SmartInspectTcpListener : IPacketListener
     private async Task HandleClientAsync(TcpClient client, string clientId, CancellationToken cancellationToken)
     {
         var clientBanner = string.Empty;
-        var packetChannel = Channel.CreateUnbounded<RawPacket>(new UnboundedChannelOptions
+        var packetChannel = Channel.CreateBounded<RawPacket>(new BoundedChannelOptions(MaxPendingPacketsPerClient)
         {
             SingleReader = true,
-            SingleWriter = true
+            SingleWriter = true,
+            FullMode = BoundedChannelFullMode.DropOldest
         });
         var packetProcessingTask = ProcessPacketsAsync(packetChannel.Reader, clientId, cancellationToken);
+        using var clientCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
 
         try
         {
             using var stream = new BufferedStream(client.GetStream(), 8192);
 
-            // Send server banner
-            var bannerBytes = Encoding.ASCII.GetBytes(ServerBanner);
-            await stream.WriteAsync(bannerBytes, cancellationToken);
-            await stream.FlushAsync(cancellationToken);
+            using (var handshakeCts = CancellationTokenSource.CreateLinkedTokenSource(clientCts.Token))
+            {
+                handshakeCts.CancelAfter(HandshakeTimeout);
 
-            // Read client banner (until newline)
-            clientBanner = await ReadUntilNewlineAsync(stream, cancellationToken);
+                var bannerBytes = Encoding.ASCII.GetBytes(ServerBanner);
+                await stream.WriteAsync(bannerBytes, handshakeCts.Token);
+                await stream.FlushAsync(handshakeCts.Token);
 
-            // Notify client connected
+                clientBanner = await ReadUntilNewlineAsync(stream, MaxClientBannerLength, handshakeCts.Token);
+            }
+
             OnClientConnected(new ClientEventArgs(clientId, clientBanner));
 
-            // Packet processing loop
-            while (!cancellationToken.IsCancellationRequested && client.Connected)
+            while (!clientCts.IsCancellationRequested && client.Connected)
             {
-                // Read packet header
-                var headerResult = await BinaryPacketReader.ReadPacketHeaderAsync(stream);
+                // Wait indefinitely for the next packet header (quiet clients stay connected).
+                var headerResult = await BinaryPacketReader.ReadPacketHeaderAsync(stream, clientCts.Token);
                 if (!headerResult.HasValue)
                     break; // Connection closed
 
                 var (packetType, size) = headerResult.Value;
 
-                // Read payload
+                using var payloadCts = CancellationTokenSource.CreateLinkedTokenSource(clientCts.Token);
+                payloadCts.CancelAfter(PacketPayloadTimeout);
+
                 var payload = new byte[size];
-                var bytesRead = await BinaryPacketReader.ReadExactlyAsync(stream, payload, size);
+                var bytesRead = await BinaryPacketReader.ReadExactlyAsync(stream, payload, size, payloadCts.Token);
                 if (bytesRead < size)
                     break; // Connection closed
 
-                // Acknowledge receipt immediately so client logging calls are not blocked on
-                // packet parsing or downstream UI processing.
-                await stream.WriteAsync(Acknowledgment, cancellationToken);
-                await stream.FlushAsync(cancellationToken);
+                // Acknowledge before parse/UI so client Log* calls do not wait on console work.
+                using (var ackCts = CancellationTokenSource.CreateLinkedTokenSource(clientCts.Token))
+                {
+                    ackCts.CancelAfter(AckWriteTimeout);
+                    await stream.WriteAsync(Acknowledgment, ackCts.Token);
+                    await stream.FlushAsync(ackCts.Token);
+                }
 
-                packetChannel.Writer.TryWrite(new RawPacket(packetType, payload));
+                if (!packetChannel.Writer.TryWrite(new RawPacket(packetType, payload)))
+                    Interlocked.Increment(ref _totalPacketsDropped);
             }
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            // Normal shutdown
         }
         catch (OperationCanceledException)
         {
-            // Normal shutdown
+            _lastError = $"{DateTime.UtcNow:O} Timeout: TCP client {clientId} handshake/mid-packet/ack timeout.";
+        }
+        catch (InvalidDataException ex)
+        {
+            _lastError = $"{DateTime.UtcNow:O} {ex.GetType().Name}: {ex.Message}";
+            OnError(ex);
         }
         catch (IOException)
         {
@@ -198,7 +231,10 @@ public class SmartInspectTcpListener : IPacketListener
         }
     }
 
-    private static async Task<string> ReadUntilNewlineAsync(Stream stream, CancellationToken cancellationToken)
+    private static async Task<string> ReadUntilNewlineAsync(
+        Stream stream,
+        int maxLength,
+        CancellationToken cancellationToken)
     {
         var sb = new StringBuilder();
         var buffer = new byte[1];
@@ -212,6 +248,9 @@ public class SmartInspectTcpListener : IPacketListener
             var c = (char)buffer[0];
             if (c == '\n')
                 break;
+
+            if (sb.Length >= maxLength)
+                throw new InvalidDataException($"Client banner exceeded {maxLength} bytes without a newline.");
 
             sb.Append(c);
         }

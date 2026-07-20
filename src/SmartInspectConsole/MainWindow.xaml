@@ -690,11 +690,20 @@
                     </GroupBox.ContextMenu>
                     <ListView ItemsSource="{Binding ConnectedApplications}"
                               VirtualizingPanel.IsVirtualizing="True"
+                              ScrollViewer.HorizontalScrollBarVisibility="Auto"
+                              ScrollViewer.VerticalScrollBarVisibility="Auto"
                               MouseDoubleClick="ConnectionsListView_MouseDoubleClick"
                               x:Name="ConnectionsListView">
                         <ListView.ItemContainerStyle>
                             <Style TargetType="ListViewItem" BasedOn="{StaticResource {x:Type ListViewItem}}">
                                 <Setter Property="Tag" Value="{Binding DataContext, ElementName=ConnectionsListView}"/>
+                                <Setter Property="Padding" Value="2,0"/>
+                                <Setter Property="Margin" Value="0"/>
+                                <Setter Property="MinHeight" Value="20"/>
+                                <Setter Property="Height" Value="22"/>
+                                <Setter Property="VerticalContentAlignment" Value="Center"/>
+                                <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+                                <Setter Property="SnapsToDevicePixels" Value="True"/>
                                 <Setter Property="ContextMenu">
                                     <Setter.Value>
                                         <ContextMenu>
@@ -725,10 +734,12 @@
                         </ListView.ItemContainerStyle>
                         <ListView.View>
                             <GridView>
-                                <GridViewColumn Header="" Width="28">
+                                <GridViewColumn Header="" Width="22">
                                     <GridViewColumn.CellTemplate>
                                         <DataTemplate>
-                                            <Ellipse Width="10" Height="10">
+                                            <Ellipse Width="8" Height="8"
+                                                     VerticalAlignment="Center"
+                                                     HorizontalAlignment="Center">
                                                 <Ellipse.Style>
                                                     <Style TargetType="Ellipse">
                                                         <Setter Property="Fill" Value="Gray"/>
@@ -743,31 +754,32 @@
                                         </DataTemplate>
                                     </GridViewColumn.CellTemplate>
                                 </GridViewColumn>
-                                <GridViewColumn Header="Application" Width="140" DisplayMemberBinding="{Binding AppName}"/>
+                                <GridViewColumn Header="Application" Width="160" DisplayMemberBinding="{Binding AppName}"/>
                                 <GridViewColumn Header="Host" Width="110" DisplayMemberBinding="{Binding HostName}"/>
-                                <GridViewColumn Header="Type" Width="80" DisplayMemberBinding="{Binding Transport}"/>
-                                <GridViewColumn Header="Messages" Width="80" DisplayMemberBinding="{Binding MessageCount, StringFormat=N0}"/>
-                                <GridViewColumn Header="Muted" Width="96">
+                                <GridViewColumn Header="Type" Width="70" DisplayMemberBinding="{Binding Transport}"/>
+                                <GridViewColumn Header="Messages" Width="70" DisplayMemberBinding="{Binding MessageCount, StringFormat=N0}"/>
+                                <GridViewColumn Header="Muted" Width="56">
                                     <GridViewColumn.CellTemplate>
                                         <DataTemplate>
                                             <CheckBox IsChecked="{Binding IsMuted}"
                                                       HorizontalAlignment="Center"
                                                       VerticalAlignment="Center"
+                                                      Margin="0"
                                                       ToolTip="Mute/unmute - muted apps have messages discarded">
                                                 <CheckBox.Template>
                                                     <ControlTemplate TargetType="CheckBox">
                                                         <Border x:Name="Box"
-                                                                Width="18"
-                                                                Height="18"
+                                                                Width="14"
+                                                                Height="14"
                                                                 Background="{DynamicResource BackgroundBrush}"
                                                                 BorderBrush="{DynamicResource BorderBrush}"
                                                                 BorderThickness="1"
-                                                                CornerRadius="4"
+                                                                CornerRadius="3"
                                                                 SnapsToDevicePixels="True">
                                                             <Path x:Name="CheckGlyph"
-                                                                  Data="M 3 9 L 7 13 L 15 5"
+                                                                  Data="M 2 7 L 5 10 L 12 3"
                                                                   Stroke="White"
-                                                                  StrokeThickness="2"
+                                                                  StrokeThickness="1.5"
                                                                   StrokeStartLineCap="Round"
                                                                   StrokeEndLineCap="Round"
                                                                   StrokeLineJoin="Round"

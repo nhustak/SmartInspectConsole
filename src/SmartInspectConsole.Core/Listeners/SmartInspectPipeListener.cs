@@ -1,5 +1,7 @@
 using System.Collections.Concurrent;
 using System.IO.Pipes;
+using System.Security.AccessControl;
+using System.Security.Principal;
 using System.Text;
 using System.Threading.Channels;
 using SmartInspectConsole.Core.Enums;
@@ -11,14 +13,24 @@ namespace SmartInspectConsole.Core.Listeners;
 
 /// <summary>
 /// Named pipe listener for receiving SmartInspect packets.
+/// Designed so a stalled console UI or slow consumer cannot pin client write calls forever:
+/// the socket/pipe is always drained (or disconnected on timeout), and parse/UI work is decoupled.
 /// </summary>
 public class SmartInspectPipeListener : IPacketListener
 {
     public const string DefaultPipeName = "smartinspect";
     private const string ServerBanner = "SmartInspect Console v1.0\n";
-    private const int InOutBufferSize = 4096;
+    private const int InOutBufferSize = 64 * 1024;
     private const int MaxPipeServerInstances = 254;
     private const int PendingAcceptors = 64;
+    private const int MaxPendingPacketsPerClient = 4096;
+    private const int MaxClientBannerLength = 4096;
+    private static readonly TimeSpan HandshakeTimeout = TimeSpan.FromSeconds(5);
+    /// <summary>
+    /// Once a packet header is received, the payload must finish within this window.
+    /// Waiting for the *next* packet has no idle timeout — quiet clients must stay connected.
+    /// </summary>
+    private static readonly TimeSpan PacketPayloadTimeout = TimeSpan.FromSeconds(30);
 
     private readonly string _pipeName;
     private CancellationTokenSource? _cts;
@@ -28,7 +40,16 @@ public class SmartInspectPipeListener : IPacketListener
     private readonly List<Task> _acceptLoopTasks = [];
     private int _waitingAcceptors;
     private long _totalConnectionsAccepted;
+    private long _totalPacketsDropped;
     private string? _lastError;
+
+    /// <summary>
+    /// 0 = not decided, 1 = open ACL instances, 2 = default-security instances only.
+    /// Decided once under <see cref="_createPipeLock"/> so 64 acceptors do not race ACL create.
+    /// </summary>
+    private int _pipeSecurityMode;
+    private readonly object _createPipeLock = new();
+    private bool _aclFallbackNotified;
 
     // Global error tracking to prevent spam from multiple instances
     private static string? _lastGlobalErrorMessage;
@@ -48,6 +69,7 @@ public class SmartInspectPipeListener : IPacketListener
     public int ClientCount => _clients.Count;
     public int WaitingAcceptors => _waitingAcceptors;
     public long TotalConnectionsAccepted => Interlocked.Read(ref _totalConnectionsAccepted);
+    public long TotalPacketsDropped => Interlocked.Read(ref _totalPacketsDropped);
     public string? LastError => _lastError;
 
     /// <summary>
@@ -67,6 +89,8 @@ public class SmartInspectPipeListener : IPacketListener
 
         _cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         IsListening = true;
+        _pipeSecurityMode = 0;
+        _aclFallbackNotified = false;
         _acceptLoopTasks.Clear();
         for (var i = 0; i < PendingAcceptors; i++)
         {
@@ -84,7 +108,7 @@ public class SmartInspectPipeListener : IPacketListener
         IsListening = false;
         _cts?.Cancel();
 
-        // Close all client connections
+        // Close all client connections immediately so website/app clients unblock.
         foreach (var client in _clients.Values)
         {
             try { client.Close(); } catch { }
@@ -137,13 +161,16 @@ public class SmartInspectPipeListener : IPacketListener
         while (!cancellationToken.IsCancellationRequested && IsListening)
         {
             NamedPipeServerStream? pipeServer = null;
+            var countedAsWaiting = false;
 
             try
             {
                 pipeServer = CreatePipeServer();
                 Interlocked.Increment(ref _waitingAcceptors);
+                countedAsWaiting = true;
                 await pipeServer.WaitForConnectionAsync(cancellationToken);
                 Interlocked.Decrement(ref _waitingAcceptors);
+                countedAsWaiting = false;
 
                 // Reset retry delay on successful connection
                 retryDelay = 100;
@@ -185,8 +212,8 @@ public class SmartInspectPipeListener : IPacketListener
             }
             finally
             {
-                if (pipeServer != null)
-                    Interlocked.Exchange(ref _waitingAcceptors, Math.Max(0, _waitingAcceptors - 1));
+                if (countedAsWaiting)
+                    Interlocked.Decrement(ref _waitingAcceptors);
 
                 // Only dispose if we didn't transfer ownership
                 pipeServer?.Dispose();
@@ -195,6 +222,66 @@ public class SmartInspectPipeListener : IPacketListener
     }
 
     private NamedPipeServerStream CreatePipeServer()
+    {
+        // Serialize creation: concurrent ACL/default creates race on the same pipe name and
+        // produce Access Denied storms (one failure per acceptor loop).
+        lock (_createPipeLock)
+        {
+            if (_pipeSecurityMode == 2)
+                return CreateDefaultPipeServer();
+
+            if (_pipeSecurityMode == 1)
+                return CreateOpenAclPipeServer();
+
+            // First instance decides security mode for the whole listener.
+            try
+            {
+                var pipe = CreateOpenAclPipeServer();
+                _pipeSecurityMode = 1;
+                return pipe;
+            }
+            catch (Exception ex) when (ex is UnauthorizedAccessException or IOException
+                or PlatformNotSupportedException or System.Security.SecurityException)
+            {
+                _pipeSecurityMode = 2;
+
+                // One quiet notice only — do not flood the log grid via OnError.
+                if (!_aclFallbackNotified)
+                {
+                    _aclFallbackNotified = true;
+                    _lastError =
+                        $"{DateTime.UtcNow:O} Pipe open-ACL unavailable ({ex.GetType().Name}: {ex.Message}). " +
+                        "Using current-user pipe security. Multi-user clients (IIS app pools) may not connect " +
+                        "unless this process can create the open ACL (or is elevated).";
+                }
+
+                return CreateDefaultPipeServer();
+            }
+        }
+    }
+
+    private NamedPipeServerStream CreateOpenAclPipeServer()
+    {
+        // Allow any local user/process to connect (IIS app pools, services, other sessions).
+        // CreateNewInstance is required so additional server waiters can be created after the first.
+        var pipeSecurity = new PipeSecurity();
+        pipeSecurity.AddAccessRule(new PipeAccessRule(
+            new SecurityIdentifier(WellKnownSidType.WorldSid, null),
+            PipeAccessRights.FullControl,
+            AccessControlType.Allow));
+
+        return NamedPipeServerStreamAcl.Create(
+            _pipeName,
+            PipeDirection.InOut,
+            MaxPipeServerInstances,
+            PipeTransmissionMode.Byte,
+            PipeOptions.Asynchronous,
+            InOutBufferSize,
+            InOutBufferSize,
+            pipeSecurity);
+    }
+
+    private NamedPipeServerStream CreateDefaultPipeServer()
     {
         return new NamedPipeServerStream(
             _pipeName,
@@ -208,10 +295,12 @@ public class SmartInspectPipeListener : IPacketListener
 
     private void ReportErrorWithRateLimit(Exception ex)
     {
-        // Don't report UnauthorizedAccessException - it's expected when not running as admin
-        // and the fallback in CreatePipeServer handles it gracefully
+        // Ignore expected create races / ACL fallback noise; real failures still surface.
         if (ex is UnauthorizedAccessException)
+        {
+            _lastError = $"{DateTime.UtcNow:O} {ex.GetType().Name}: {ex.Message}";
             return;
+        }
 
         lock (_errorLock)
         {
@@ -232,50 +321,77 @@ public class SmartInspectPipeListener : IPacketListener
     private async Task HandleClientAsync(NamedPipeServerStream pipeServer, string clientId, CancellationToken cancellationToken)
     {
         var clientInfo = string.Empty;
-        var packetChannel = Channel.CreateUnbounded<RawPacket>(new UnboundedChannelOptions
+
+        // Bounded queue: if UI/parse falls behind, drop packets instead of stopping the read loop.
+        // Stopping the read loop is what freezes SmartInspect clients (and websites) on write.
+        var packetChannel = Channel.CreateBounded<RawPacket>(new BoundedChannelOptions(MaxPendingPacketsPerClient)
         {
             SingleReader = true,
-            SingleWriter = true
+            SingleWriter = true,
+            FullMode = BoundedChannelFullMode.DropOldest
         });
         var packetProcessingTask = ProcessPacketsAsync(packetChannel.Reader, clientId, cancellationToken);
 
+        // Per-client linked CTS so idle/handshake timeouts force a clean disconnect.
+        using var clientCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+
         try
         {
-            // Send server banner
-            var bannerBytes = Encoding.ASCII.GetBytes(ServerBanner);
-            await pipeServer.WriteAsync(bannerBytes, cancellationToken);
-            await pipeServer.FlushAsync(cancellationToken);
+            // Handshake must not hang forever (half-open pipe instances starve acceptors).
+            using (var handshakeCts = CancellationTokenSource.CreateLinkedTokenSource(clientCts.Token))
+            {
+                handshakeCts.CancelAfter(HandshakeTimeout);
 
-            // Read client banner (until newline) - same protocol as TCP
-            clientInfo = await ReadUntilNewlineAsync(pipeServer, cancellationToken);
+                var bannerBytes = Encoding.ASCII.GetBytes(ServerBanner);
+                await pipeServer.WriteAsync(bannerBytes, handshakeCts.Token);
+                await pipeServer.FlushAsync(handshakeCts.Token);
 
-            // Notify client connected
+                clientInfo = await ReadUntilNewlineAsync(pipeServer, MaxClientBannerLength, handshakeCts.Token);
+            }
+
             OnClientConnected(new ClientEventArgs(clientId, clientInfo));
 
-            // Packet processing loop
-            while (!cancellationToken.IsCancellationRequested && pipeServer.IsConnected)
+            // Keep draining the pipe as long as the client is connected.
+            // Do not apply an idle timeout while waiting for the next packet — production clients
+            // often stay connected and log only occasionally. Stopping the read loop (or leaving
+            // a half-open instance) is what freezes websites on SmartInspect Log* calls.
+            while (!clientCts.IsCancellationRequested && pipeServer.IsConnected)
             {
-                // Read packet header
-                var headerResult = await BinaryPacketReader.ReadPacketHeaderAsync(pipeServer);
+                var headerResult = await BinaryPacketReader.ReadPacketHeaderAsync(pipeServer, clientCts.Token);
                 if (!headerResult.HasValue)
                     break; // Connection closed
 
                 var (packetType, size) = headerResult.Value;
 
-                // Read payload
+                using var payloadCts = CancellationTokenSource.CreateLinkedTokenSource(clientCts.Token);
+                payloadCts.CancelAfter(PacketPayloadTimeout);
+
                 var payload = new byte[size];
-                var bytesRead = await BinaryPacketReader.ReadExactlyAsync(pipeServer, payload, size);
+                var bytesRead = await BinaryPacketReader.ReadExactlyAsync(pipeServer, payload, size, payloadCts.Token);
                 if (bytesRead < size)
                     break; // Connection closed
 
-                packetChannel.Writer.TryWrite(new RawPacket(packetType, payload));
+                // DropOldest channel: always accept; older queued packets may be discarded under load.
+                if (!packetChannel.Writer.TryWrite(new RawPacket(packetType, payload)))
+                    Interlocked.Increment(ref _totalPacketsDropped);
 
-                // NOTE: Named pipes don't require acknowledgment
+                // NOTE: Named pipes don't require acknowledgment. The critical requirement is that
+                // we keep reading so the OS pipe buffer never fills and blocks the client process.
             }
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            // Normal shutdown of the listener.
         }
         catch (OperationCanceledException)
         {
-            // Normal shutdown
+            // Handshake or mid-packet timeout — disconnect so the client unblocks and can reconnect.
+            ReportErrorWithRateLimit(new TimeoutException(
+                $"Pipe client {clientId} disconnected after handshake or mid-packet timeout."));
+        }
+        catch (InvalidDataException ex)
+        {
+            ReportErrorWithRateLimit(ex);
         }
         catch (IOException)
         {
@@ -321,7 +437,10 @@ public class SmartInspectPipeListener : IPacketListener
         }
     }
 
-    private static async Task<string> ReadUntilNewlineAsync(Stream stream, CancellationToken cancellationToken)
+    private static async Task<string> ReadUntilNewlineAsync(
+        Stream stream,
+        int maxLength,
+        CancellationToken cancellationToken)
     {
         var sb = new StringBuilder();
         var buffer = new byte[1];
@@ -335,6 +454,9 @@ public class SmartInspectPipeListener : IPacketListener
             var c = (char)buffer[0];
             if (c == '\n')
                 break;
+
+            if (sb.Length >= maxLength)
+                throw new InvalidDataException($"Client banner exceeded {maxLength} bytes without a newline.");
 
             sb.Append(c);
         }
