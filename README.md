@@ -6,7 +6,7 @@ A modern Windows console for SmartInspect logs with live filtering, multi-view a
 
 This project exists because the original SmartInspect Console never really got the refresh it deserved. SmartInspect itself is still one of the most useful tools in the box, and this app is meant to make those logs far easier to work with in 2026.
 
-This project is now being driven with Codex, which is my tool of choice for development work on this codebase.
+Day-to-day work on this codebase is AI-assisted. The tools used here are **Codex**, **Claude**, and **Grok**; project rules and MCP setup are kept AI-agnostic so any of them can work against the same repo and running console.
 
 You still need the actual SmartInspect product and you absolutely should buy it. It is one of the most useful tools I have ever used, and this project exists because the tool itself is that good:
 [https://code-partners.com/offerings/smartinspect/](https://code-partners.com/offerings/smartinspect/)
@@ -176,19 +176,25 @@ When the desktop app starts, it automatically starts listening on:
 - `WebSocket 4229`
 - local API + MCP on `127.0.0.1:42331`
 
-## Codex MCP Setup
+## MCP Setup
 
-Add this to `C:\Users\nhust\.codex\config.toml`:
+The console hosts MCP in-process at:
+
+```text
+http://127.0.0.1:42331/mcp
+```
+
+Point your AI client (Codex, Claude, Grok, or any other MCP-capable tool) at that URL. Example for Codex (`~/.codex/config.toml`):
 
 ```toml
 [mcp_servers.smartinspect]
 url = 'http://127.0.0.1:42331/mcp'
 ```
 
-Then the workflow is just:
+Workflow:
 
 - start `SmartInspectConsole`
-- start Codex
+- start your AI client with the SmartInspect MCP server enabled
 
 ## SmartInspect .NET Usage
 
@@ -313,7 +319,7 @@ See [docs/soak-test.md](C:\Project\Utility\SmartInspectConsole\docs\soak-test.md
 - WebSocket clients may be connected before they have sent enough identifying data to appear by application name in the Connections panel.
 - MCP trace entries are intentionally excluded from the built-in `All` view and are meant to be inspected in the dedicated `MCP Trace` tab.
 - Import/export of `.sil` files is supported in the desktop app, but memory-buffer crash retrieval workflows are still not implemented end-to-end.
-- There is currently no deployment pipeline, installer, or pre-compiled release package included in this repository yet. At the moment, you build and run it from source.
+- Desktop deploy scripts live under `deploy/` (`c.ps1` for SureCourt, `g.ps1` for CC3 prod). An Advanced Installer project exists separately for MSI packaging.
 
 ## Requirements
 
