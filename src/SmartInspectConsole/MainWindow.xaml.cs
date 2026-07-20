@@ -151,6 +151,43 @@ public partial class MainWindow : Window
         ApplyDarkTitleBar(false);
     }
 
+    private void RemoteAttachMenu_SubmenuOpened(object sender, RoutedEventArgs e)
+    {
+        if (sender is not MenuItem menu)
+            return;
+
+        menu.Items.Clear();
+        var enabled = _viewModel.RemoteServers.Where(s => s.Enabled).ToList();
+        if (enabled.Count == 0)
+        {
+            menu.Items.Add(new MenuItem
+            {
+                Header = "No servers configured…",
+                Command = _viewModel.ConfigureRemoteServersCommand
+            });
+            return;
+        }
+
+        foreach (var server in enabled)
+        {
+            var item = new MenuItem
+            {
+                Header = server.DisplayLabel,
+                Command = _viewModel.AttachRemoteCommand,
+                CommandParameter = server,
+                IsEnabled = !_viewModel.IsRemoteAttached
+            };
+            menu.Items.Add(item);
+        }
+
+        menu.Items.Add(new Separator());
+        menu.Items.Add(new MenuItem
+        {
+            Header = "Configure servers…",
+            Command = _viewModel.ConfigureRemoteServersCommand
+        });
+    }
+
     private async void Settings_Click(object sender, RoutedEventArgs e)
     {
         var dialog = new SettingsDialog(_viewModel.TcpPort, _viewModel.PipeName, _viewModel.WebSocketPort, _viewModel.DebugMode, _viewModel.MaxLogEntries, _viewModel.ConfirmBeforeClear, _viewModel.Use24HourTime)

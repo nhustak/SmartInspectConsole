@@ -4,6 +4,7 @@ using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
 using System.Reflection;
+using System.Text;
 using System.Windows;
 using System.Windows.Data;
 using System.Windows.Input;
@@ -106,6 +107,11 @@ public class MainViewModel : ViewModelBase, IRenderControl, IDisposable
     private bool _confirmBeforeClear = true;
     private bool _use24HourTime = true;
 
+    // Remote SSH attach
+    private RemoteAttachSession? _remoteAttach;
+    private string _remoteAttachStatus = "Remote: not attached";
+    private bool _isRemoteAttached;
+
     public MainViewModel()
     {
         _backend = new SmartInspectLogBackend(new SmartInspectBackendOptions
@@ -179,6 +185,17 @@ public class MainViewModel : ViewModelBase, IRenderControl, IDisposable
         // View-specific commands
         ClearViewLogCommand = new RelayCommand<LogViewViewModel>(ClearViewLog);
 
+        // Remote SSH attach
+        RemoteServers = new ObservableCollection<RemoteServerProfile>();
+        BindingOperations.EnableCollectionSynchronization(RemoteServers, _logEntriesLock);
+        AttachRemoteCommand = new AsyncRelayCommand(
+            async p => await AttachRemoteAsync(p as RemoteServerProfile),
+            p => p is RemoteServerProfile profile && profile.Enabled && !IsRemoteAttached);
+        DetachRemoteCommand = new AsyncRelayCommand(DetachRemoteAsync, () => IsRemoteAttached);
+        ConfigureRemoteServersCommand = new RelayCommand(ConfigureRemoteServers);
+        ExportAttachInviteCommand = new RelayCommand(ExportAttachInvite);
+        ImportAttachInviteCommand = new RelayCommand(ImportAttachInvite);
+
         // Initialize batch processing timer
         _batchTimer = new DispatcherTimer(DispatcherPriority.Background)
         {
@@ -198,6 +215,7 @@ public class MainViewModel : ViewModelBase, IRenderControl, IDisposable
     public ObservableCollection<LogViewViewModel> Views { get; }
     public ObservableCollection<LogEntryDetailViewModel> DetailTabs { get; }
     public ObservableCollection<ConnectedApplication> ConnectedApplications { get; }
+    public ObservableCollection<RemoteServerProfile> RemoteServers { get; }
 
     // Available filter values (populated from received log entries)
     public ObservableCollection<string> AvailableAppNames { get; } = new();
@@ -512,6 +530,32 @@ public class MainViewModel : ViewModelBase, IRenderControl, IDisposable
 
     // View-specific
     public ICommand ClearViewLogCommand { get; }
+
+    // Remote SSH attach
+    public ICommand AttachRemoteCommand { get; }
+    public ICommand DetachRemoteCommand { get; }
+    public ICommand ConfigureRemoteServersCommand { get; }
+    public ICommand ExportAttachInviteCommand { get; }
+    public ICommand ImportAttachInviteCommand { get; }
+
+    public bool IsRemoteAttached
+    {
+        get => _isRemoteAttached;
+        private set
+        {
+            if (SetProperty(ref _isRemoteAttached, value))
+            {
+                (AttachRemoteCommand as AsyncRelayCommand)?.RaiseCanExecuteChanged();
+                (DetachRemoteCommand as AsyncRelayCommand)?.RaiseCanExecuteChanged();
+            }
+        }
+    }
+
+    public string RemoteAttachStatus
+    {
+        get => _remoteAttachStatus;
+        private set => SetProperty(ref _remoteAttachStatus, value);
+    }
 
     #endregion
 
@@ -1633,6 +1677,9 @@ public class MainViewModel : ViewModelBase, IRenderControl, IDisposable
         state.ConfirmBeforeClear = ConfirmBeforeClear;
         state.Use24HourTime = Use24HourTime;
 
+        // Remote servers
+        state.RemoteServers = RemoteServers.Select(CloneRemoteProfile).ToList();
+
         // Views
         state.Views.Clear();
         foreach (var view in Views)
@@ -1677,6 +1724,42 @@ public class MainViewModel : ViewModelBase, IRenderControl, IDisposable
         // Behavior
         ConfirmBeforeClear = state.ConfirmBeforeClear;
         Use24HourTime = state.Use24HourTime;
+
+        // Remote servers
+        RemoteServers.Clear();
+        if (state.RemoteServers is { Count: > 0 })
+        {
+            foreach (var s in state.RemoteServers)
+                RemoteServers.Add(CloneRemoteProfile(s));
+        }
+        else
+        {
+            // Sensible starter list — user edits host/key via Tools > Remote Servers
+            RemoteServers.Add(new RemoteServerProfile
+            {
+                Name = "SureCourt",
+                SshHost = "surecourt.example",
+                SshUser = Environment.UserName,
+                AuthMethod = "privateKey",
+                PrivateKeyPath = Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".ssh", "id_rsa"),
+                RemoteApiPort = 42331,
+                CatchUpLimit = 2000,
+                Enabled = true
+            });
+            RemoteServers.Add(new RemoteServerProfile
+            {
+                Name = "CC3 Prod",
+                SshHost = "cc3prod.example",
+                SshUser = Environment.UserName,
+                AuthMethod = "privateKey",
+                PrivateKeyPath = Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".ssh", "id_rsa"),
+                RemoteApiPort = 42331,
+                CatchUpLimit = 2000,
+                Enabled = true
+            });
+        }
 
         Views.Clear();
         var allView = CreateAllView();
@@ -2078,10 +2161,256 @@ public class MainViewModel : ViewModelBase, IRenderControl, IDisposable
     public void Dispose()
     {
         _batchTimer.Stop();
+        try
+        {
+            _remoteAttach?.DetachAsync().GetAwaiter().GetResult();
+        }
+        catch
+        {
+            // ignore on dispose
+        }
+
         _tcpListener?.Dispose();
         _pipeListener?.Dispose();
         _webSocketListener?.Dispose();
     }
+
+    #region Remote SSH attach
+
+    private void ConfigureRemoteServers()
+    {
+        var dialog = new RemoteServersDialog(RemoteServers.Select(CloneRemoteProfile))
+        {
+            Owner = Application.Current.MainWindow
+        };
+
+        if (dialog.ShowDialog() != true)
+            return;
+
+        RemoteServers.Clear();
+        foreach (var s in dialog.ResultServers)
+            RemoteServers.Add(s);
+
+        StatusText = $"Remote servers updated ({RemoteServers.Count}).";
+    }
+
+    private void ExportAttachInvite()
+    {
+        var dialog = new ExportAttachInviteDialog
+        {
+            Owner = Application.Current.MainWindow
+        };
+        dialog.ShowDialog();
+    }
+
+    private void ImportAttachInvite()
+    {
+        try
+        {
+            if (!Clipboard.ContainsText())
+            {
+                MessageBoxHelper.Show(
+                    "Clipboard has no text. On the remote console use Tools → Export SSH Attach Invite first.",
+                    "Import Invite",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Information);
+                return;
+            }
+
+            var json = Clipboard.GetText();
+            var invite = RemoteAttachInviteService.ParseClipboardJson(json);
+            var profile = RemoteAttachInviteService.ImportToProfile(invite);
+
+            // Replace same-name entry if present
+            var existing = RemoteServers.FirstOrDefault(s =>
+                string.Equals(s.Name, profile.Name, StringComparison.OrdinalIgnoreCase));
+            if (existing != null)
+                RemoteServers.Remove(existing);
+
+            RemoteServers.Add(profile);
+
+            StatusText = $"Imported remote profile '{profile.Name}' ({profile.SshUser}@{profile.SshHost}).";
+            MessageBoxHelper.Show(
+                $"Imported attach profile:\n\n" +
+                $"  {profile.DisplayLabel}\n" +
+                $"  Key: {profile.PrivateKeyPath ?? "(none — set key path in Remote Servers)"}\n\n" +
+                "Use Tools → Remote Attach to connect.\n" +
+                "Clear the clipboard if it still holds the invite (private key).",
+                "Import Invite",
+                MessageBoxButton.OK,
+                MessageBoxImage.Information);
+        }
+        catch (Exception ex)
+        {
+            MessageBoxHelper.Show(
+                $"Could not import invite from clipboard:\n\n{ex.Message}",
+                "Import Invite",
+                MessageBoxButton.OK,
+                MessageBoxImage.Error);
+        }
+    }
+
+    private async Task AttachRemoteAsync(RemoteServerProfile? profile)
+    {
+        if (profile == null)
+            return;
+
+        if (IsRemoteAttached)
+        {
+            MessageBoxHelper.Show(
+                "Already attached to a remote server. Detach first.",
+                "Remote Attach",
+                MessageBoxButton.OK,
+                MessageBoxImage.Information);
+            return;
+        }
+
+        try
+        {
+            RemoteAttachStatus = $"Remote: connecting to {profile.Name}…";
+            StatusText = RemoteAttachStatus;
+
+            var session = new RemoteAttachSession(
+                profile,
+                onLogs: (entries, clientPrefix) =>
+                {
+                    Application.Current.Dispatcher.BeginInvoke(() =>
+                    {
+                        foreach (var entry in entries)
+                        {
+                            var clientId = $"{clientPrefix}:{entry.AppName}@{entry.HostName}";
+                            EnqueuePendingLogEntry(entry, clientId);
+                        }
+                    });
+                },
+                onApps: (apps, profileName) =>
+                {
+                    Application.Current.Dispatcher.BeginInvoke(() =>
+                    {
+                        ApplyRemoteApplications(apps, profileName);
+                    });
+                },
+                onStatus: status =>
+                {
+                    Application.Current.Dispatcher.BeginInvoke(() =>
+                    {
+                        RemoteAttachStatus = $"Remote: {status}";
+                        StatusText = RemoteAttachStatus;
+                    });
+                },
+                onError: ex =>
+                {
+                    Application.Current.Dispatcher.BeginInvoke(() =>
+                    {
+                        RemoteAttachStatus = $"Remote error: {ex.Message}";
+                        StatusText = RemoteAttachStatus;
+                    });
+                });
+
+            await session.AttachAsync();
+            _remoteAttach = session;
+            IsRemoteAttached = true;
+            RemoteAttachStatus =
+                $"Remote: attached to {profile.Name} via SSH tunnel {session.LocalBaseUrl} (catch-up done, live)";
+            StatusText = RemoteAttachStatus;
+        }
+        catch (Exception ex)
+        {
+            IsRemoteAttached = false;
+            _remoteAttach = null;
+            RemoteAttachStatus = $"Remote: attach failed — {ex.Message}";
+            StatusText = RemoteAttachStatus;
+            MessageBoxHelper.Show(
+                $"Failed to attach to {profile.Name}:\n\n{ex.Message}",
+                "Remote Attach",
+                MessageBoxButton.OK,
+                MessageBoxImage.Error);
+        }
+    }
+
+    private async Task DetachRemoteAsync()
+    {
+        if (_remoteAttach == null)
+        {
+            IsRemoteAttached = false;
+            RemoteAttachStatus = "Remote: not attached";
+            return;
+        }
+
+        try
+        {
+            await _remoteAttach.DetachAsync();
+        }
+        catch (Exception ex)
+        {
+            StatusText = $"Remote detach error: {ex.Message}";
+        }
+        finally
+        {
+            await _remoteAttach.DisposeAsync();
+            _remoteAttach = null;
+            IsRemoteAttached = false;
+            RemoteAttachStatus = "Remote: not attached";
+            StatusText = RemoteAttachStatus;
+        }
+    }
+
+    private void ApplyRemoteApplications(IReadOnlyList<ApplicationSummaryDto> apps, string profileName)
+    {
+        var transport = $"ssh:{profileName}";
+        foreach (var app in apps)
+        {
+            var clientId = $"ssh:{profileName}:{app.ClientId}";
+            if (!_connectionsByClientId.TryGetValue(clientId, out var connection) || connection == null)
+            {
+                connection = new ConnectedApplication
+                {
+                    ClientId = clientId,
+                    AppName = app.AppName,
+                    HostName = string.IsNullOrWhiteSpace(app.HostName) ? profileName : app.HostName,
+                    Transport = transport,
+                    IsConnected = app.IsConnected,
+                    MessageCount = app.MessageCount,
+                    IsMuted = _mutedApps.Contains($"{app.AppName}@{app.HostName}")
+                };
+                connection.PropertyChanged += OnConnectionPropertyChanged;
+                _connectionsByClientId[clientId] = connection;
+                ConnectedApplications.Add(connection);
+            }
+            else
+            {
+                connection.AppName = app.AppName;
+                connection.HostName = string.IsNullOrWhiteSpace(app.HostName) ? profileName : app.HostName;
+                connection.Transport = transport;
+                connection.IsConnected = app.IsConnected;
+                connection.MessageCount = app.MessageCount;
+            }
+        }
+
+        OnPropertyChanged(nameof(TcpStatus));
+        OnPropertyChanged(nameof(PipeStatus));
+        OnPropertyChanged(nameof(WebSocketStatus));
+    }
+
+    private static RemoteServerProfile CloneRemoteProfile(RemoteServerProfile s) => new()
+    {
+        Id = s.Id,
+        Name = s.Name,
+        SshHost = s.SshHost,
+        SshPort = s.SshPort,
+        SshUser = s.SshUser,
+        AuthMethod = s.AuthMethod,
+        PrivateKeyPath = s.PrivateKeyPath,
+        PrivateKeyPassphrase = s.PrivateKeyPassphrase,
+        Password = s.Password,
+        RemoteApiPort = s.RemoteApiPort,
+        LocalTunnelPort = s.LocalTunnelPort,
+        CatchUpLimit = s.CatchUpLimit,
+        PollIntervalMs = s.PollIntervalMs,
+        Enabled = s.Enabled
+    };
+
+    #endregion
 
     private void AddNewFilterValues(ObservableCollection<string> targetCollection, HashSet<string> newValues)
     {

@@ -18,6 +18,7 @@
   <ItemGroup>
     <PackageReference Include="ModelContextProtocol" Version="1.1.0" />
     <PackageReference Include="ModelContextProtocol.AspNetCore" Version="1.1.0" />
+    <PackageReference Include="SSH.NET" Version="2024.2.0" />
     <PackageReference Include="WPF-UI" Version="4.2.0" />
   </ItemGroup>
 
@@ -27,9 +28,9 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <UseWPF>true</UseWPF>
-    <Version>1.0.1.19</Version>
-    <AssemblyVersion>1.0.1.19</AssemblyVersion>
-    <FileVersion>1.0.1.19</FileVersion>
+    <Version>1.0.1.21</Version>
+    <AssemblyVersion>1.0.1.21</AssemblyVersion>
+    <FileVersion>1.0.1.21</FileVersion>
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
     <SelfContained>true</SelfContained>
     <PublishSingleFile>true</PublishSingleFile>

@@ -10,6 +10,11 @@ public sealed record LogQueryRequest
     public IReadOnlyList<string>? Levels { get; init; }
     public string? Text { get; init; }
     public string? Cursor { get; init; }
+    /// <summary>
+    /// When set, only entries with Sequence strictly greater than this value are returned
+    /// (oldest-first). Used for remote attach live tail after catch-up.
+    /// </summary>
+    public long? SinceSequence { get; init; }
     public int Limit { get; init; } = 100;
     public bool IncludeData { get; init; }
     public bool FlaggedOnly { get; init; }

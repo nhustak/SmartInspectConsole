@@ -268,6 +268,30 @@
                     <MenuItem.Icon><TextBlock Text="&#xE713;" FontFamily="Segoe Fluent Icons" FontSize="14"/></MenuItem.Icon>
                 </MenuItem>
                 <Separator/>
+                <MenuItem Header="_Remote Attach" x:Name="RemoteAttachMenu"
+                          SubmenuOpened="RemoteAttachMenu_SubmenuOpened">
+                    <MenuItem.Icon><TextBlock Text="&#xE774;" FontFamily="Segoe Fluent Icons" FontSize="14"/></MenuItem.Icon>
+                    <!-- Items filled in code-behind from RemoteServers -->
+                    <MenuItem Header="(configure servers…)" IsEnabled="False"/>
+                </MenuItem>
+                <MenuItem Header="_Detach Remote"
+                          Command="{Binding DetachRemoteCommand}">
+                    <MenuItem.Icon><TextBlock Text="&#xE89A;" FontFamily="Segoe Fluent Icons" FontSize="14"/></MenuItem.Icon>
+                </MenuItem>
+                <MenuItem Header="Remote _Servers…" Command="{Binding ConfigureRemoteServersCommand}">
+                    <MenuItem.Icon><TextBlock Text="&#xE8F1;" FontFamily="Segoe Fluent Icons" FontSize="14"/></MenuItem.Icon>
+                </MenuItem>
+                <MenuItem Header="_Export SSH Attach Invite…"
+                          Command="{Binding ExportAttachInviteCommand}"
+                          ToolTip="Run on the REMOTE console: generate keys, install public key, copy invite to clipboard">
+                    <MenuItem.Icon><TextBlock Text="&#xE8C8;" FontFamily="Segoe Fluent Icons" FontSize="14"/></MenuItem.Icon>
+                </MenuItem>
+                <MenuItem Header="_Import SSH Attach Invite"
+                          Command="{Binding ImportAttachInviteCommand}"
+                          ToolTip="Run on your laptop: import invite from clipboard (creates profile + private key)">
+                    <MenuItem.Icon><TextBlock Text="&#xE8B5;" FontFamily="Segoe Fluent Icons" FontSize="14"/></MenuItem.Icon>
+                </MenuItem>
+                <Separator/>
                 <MenuItem Header="Trace _MCP Calls"
                           IsCheckable="True"
                           IsChecked="{Binding EnableMcpTrace}">
@@ -1008,6 +1032,12 @@
             <Separator Background="{DynamicResource BorderBrush}"/>
             <StatusBarItem>
                 <TextBlock Text="{Binding WebSocketStatus}"/>
+            </StatusBarItem>
+            <Separator Background="{DynamicResource BorderBrush}"/>
+            <StatusBarItem>
+                <TextBlock Text="{Binding RemoteAttachStatus}"
+                           Foreground="{DynamicResource AccentBrush}"
+                           ToolTip="SSH remote attach status"/>
             </StatusBarItem>
             <Separator Background="{DynamicResource BorderBrush}"/>
             <StatusBarItem>

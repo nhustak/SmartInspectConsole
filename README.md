@@ -1,4 +1,4 @@
-# SmartInspect Console v1.0.1.18
+# SmartInspect Console v1.0.1.21
 
 Last updated: 2026-07-20
 
@@ -175,6 +175,24 @@ When the desktop app starts, it automatically starts listening on:
 - named pipe `smartinspect`
 - `WebSocket 4229`
 - local API + MCP on `127.0.0.1:42331`
+
+## Remote SSH attach
+
+Monitor a SmartInspect Console already running on SureCourt or CC3 production without exposing SI ports publicly.
+
+### Easy pairing (recommended)
+
+1. On the **remote** server: run SmartInspect Console + ensure **OpenSSH Server** is installed/running.
+2. **Tools → Export SSH Attach Invite…** — confirm host/user, generate keys (installs public key on that machine), copy invite to clipboard.
+3. On **this PC**: **Tools → Import SSH Attach Invite** — creates a server profile and saves the private key under `%LocalAppData%\SmartInspectConsole\ssh\`.
+4. **Tools → Remote Attach → (server)** — SSH tunnel, catch-up history, then live poll.
+5. **Tools → Detach Remote** when finished. Clear the clipboard after import (invite may contain a private key).
+
+### Manual config
+
+**Tools → Remote Servers…** — edit SSH host, user, key path or password, remote API port, catch-up size, poll interval.
+
+Server list lives in `%LocalAppData%\SmartInspectConsole\appstate.json`.
 
 ## MCP Setup
 

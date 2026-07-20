@@ -1,0 +1,106 @@
+<Window x:Class="SmartInspectConsole.Views.ExportAttachInviteDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Export SSH Attach Invite"
+        Icon="/Resources/smartinspectconsole.png"
+        Height="460" Width="520"
+        WindowStartupLocation="CenterOwner"
+        ResizeMode="NoResize"
+        ShowInTaskbar="False"
+        Background="{DynamicResource BackgroundBrush}"
+        Foreground="{DynamicResource ForegroundBrush}">
+
+    <Window.Resources>
+        <Style TargetType="TextBox">
+            <Setter Property="Background" Value="{DynamicResource BackgroundBrush}"/>
+            <Setter Property="Foreground" Value="{DynamicResource ForegroundBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}"/>
+            <Setter Property="Padding" Value="4,2"/>
+            <Setter Property="Margin" Value="0,2"/>
+        </Style>
+        <Style TargetType="Label">
+            <Setter Property="Foreground" Value="{DynamicResource ForegroundBrush}"/>
+            <Setter Property="Padding" Value="0,2"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+        </Style>
+        <Style TargetType="Button">
+            <Setter Property="Background" Value="{DynamicResource SurfaceBrush}"/>
+            <Setter Property="Foreground" Value="{DynamicResource ForegroundBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}"/>
+            <Setter Property="Padding" Value="12,5"/>
+            <Setter Property="Margin" Value="4,0"/>
+        </Style>
+        <Style TargetType="CheckBox">
+            <Setter Property="Foreground" Value="{DynamicResource ForegroundBrush}"/>
+            <Setter Property="Margin" Value="0,6,0,0"/>
+        </Style>
+        <Style TargetType="PasswordBox">
+            <Setter Property="Background" Value="{DynamicResource BackgroundBrush}"/>
+            <Setter Property="Foreground" Value="{DynamicResource ForegroundBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}"/>
+            <Setter Property="Padding" Value="4,2"/>
+            <Setter Property="Margin" Value="0,2"/>
+        </Style>
+    </Window.Resources>
+
+    <DockPanel Margin="16">
+        <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,12,0,0">
+            <Button Content="Generate &amp; Copy" IsDefault="True" Click="Generate_Click" Width="130"/>
+            <Button Content="Cancel" IsCancel="True" Click="Cancel_Click" Width="88"/>
+        </StackPanel>
+
+        <StackPanel>
+            <TextBlock TextWrapping="Wrap" Margin="0,0,0,12"
+                       Foreground="{DynamicResource ForegroundSecondaryBrush}"
+                       Text="Run this on the REMOTE machine (SureCourt / CC3 prod). Generates an SSH key, installs the public key for OpenSSH login, and copies an invite (including private key) to the clipboard for import on your laptop."/>
+
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="130"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+
+                <Label Grid.Row="0" Content="Display Name:"/>
+                <TextBox Grid.Row="0" Grid.Column="1" x:Name="NameBox"/>
+
+                <Label Grid.Row="1" Content="SSH Host / IP:"/>
+                <TextBox Grid.Row="1" Grid.Column="1" x:Name="HostBox"
+                         ToolTip="Hostname or IP that your laptop will use to reach this machine"/>
+
+                <Label Grid.Row="2" Content="SSH Port:"/>
+                <TextBox Grid.Row="2" Grid.Column="1" x:Name="SshPortBox" Width="80" HorizontalAlignment="Left"/>
+
+                <Label Grid.Row="3" Content="SSH User:"/>
+                <TextBox Grid.Row="3" Grid.Column="1" x:Name="UserBox"/>
+
+                <Label Grid.Row="4" Content="API Port:"/>
+                <TextBox Grid.Row="4" Grid.Column="1" x:Name="ApiPortBox" Width="80" HorizontalAlignment="Left"
+                         ToolTip="Local API on this console (default 42331)"/>
+
+                <Label Grid.Row="5" Content="Catch-up Limit:"/>
+                <TextBox Grid.Row="5" Grid.Column="1" x:Name="CatchUpBox" Width="80" HorizontalAlignment="Left"/>
+
+                <Label Grid.Row="6" Content="Key Passphrase:"/>
+                <PasswordBox Grid.Row="6" Grid.Column="1" x:Name="PassphraseBox"
+                             ToolTip="Optional. Leave empty for an unencrypted private key."/>
+
+                <CheckBox Grid.Row="7" Grid.Column="0" Grid.ColumnSpan="2"
+                          x:Name="GenerateKeysBox" Content="Generate new SSH key pair and install public key"
+                          IsChecked="True"/>
+            </Grid>
+
+            <TextBlock x:Name="StatusText" TextWrapping="Wrap" Margin="0,12,0,0"
+                       Foreground="{DynamicResource AccentBrush}"/>
+        </StackPanel>
+    </DockPanel>
+</Window>

@@ -2,6 +2,24 @@
 
 All notable changes to SmartInspect Console are documented here.
 
+## 1.0.1.21 — 2026-07-20
+
+### SSH attach invite (pair remote ↔ laptop)
+
+- **Tools → Export SSH Attach Invite…** (run on the remote console): generates ed25519 key via `ssh-keygen`, installs public key into OpenSSH `authorized_keys`, copies a JSON invite (host/user/API port + private key) to the clipboard.
+- **Tools → Import SSH Attach Invite** (run on the laptop): reads clipboard, saves private key under `%LocalAppData%\SmartInspectConsole\ssh\`, adds a Remote Server profile ready for **Remote Attach**.
+- Profile-only export supported (no keygen) when SSH is already configured.
+
+## 1.0.1.20 — 2026-07-20
+
+### Remote SSH attach
+
+- Configurable list of remote SmartInspect Console hosts (SureCourt / CC3 Prod starters).
+- **Tools → Remote Servers…** to edit SSH host/user/key-or-password, remote API port, catch-up size, poll interval.
+- **Tools → Remote Attach** picks a server: opens **SSH local port-forward** to remote `127.0.0.1:42331`, pulls existing logs (catch-up), then live-polls new entries via `SinceSequence`.
+- Status bar shows attach/tunnel state. Detach ends the tunnel.
+- Backend `LogQueryRequest.SinceSequence` enables efficient live tail after snapshot.
+
 ## 1.0.1.19 — 2026-07-20
 
 ### Tests

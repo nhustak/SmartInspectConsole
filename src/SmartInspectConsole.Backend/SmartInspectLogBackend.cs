@@ -208,8 +208,42 @@ public sealed class SmartInspectLogBackend : ISmartInspectLogBackend
             var threadIds = request.ThreadIds?.ToHashSet();
             var levels = request.Levels?.Where(v => !string.IsNullOrWhiteSpace(v)).ToHashSet(StringComparer.OrdinalIgnoreCase);
             var cursorSequence = TryParseCursor(request.Cursor);
+            var sinceSequence = request.SinceSequence;
 
             var items = new List<LogEntryDto>(limit);
+
+            // Live-tail mode: entries newer than SinceSequence, oldest-first (for remote attach).
+            if (sinceSequence.HasValue)
+            {
+                foreach (var stored in _entries)
+                {
+                    if (stored.Sequence <= sinceSequence.Value)
+                        continue;
+
+                    if (!MatchesQuery(stored, appNames, sessionNames, hostNames, processIds, threadIds, levels, request.Text, request.FlaggedOnly))
+                        continue;
+
+                    items.Add(ToDto(stored, request.IncludeData));
+                    if (items.Count == limit)
+                        break;
+                }
+
+                var hasMoreNewer = items.Count == limit &&
+                    _entries.Any(e => e.Sequence > (items.Count > 0 ? items[^1].Sequence : sinceSequence.Value) &&
+                        MatchesQuery(e, appNames, sessionNames, hostNames, processIds, threadIds, levels, request.Text, request.FlaggedOnly));
+
+                return new LogQueryResponse
+                {
+                    Items = items,
+                    ReturnedCount = items.Count,
+                    HasMore = hasMoreNewer,
+                    NextCursor = items.Count > 0 ? items[^1].Sequence.ToString() : sinceSequence.Value.ToString(),
+                    AppliedLimit = limit,
+                    RunId = _runId
+                };
+            }
+
+            // Default: newest-first history page with optional older-page cursor.
             foreach (var stored in _entries.AsEnumerable().Reverse())
             {
                 if (cursorSequence.HasValue && stored.Sequence >= cursorSequence.Value)

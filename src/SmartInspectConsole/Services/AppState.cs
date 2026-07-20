@@ -61,6 +61,11 @@ public class AppState
     public List<string> MutedApplications { get; set; } = new();
     public int MaxLogEntries { get; set; } = 20_000;
 
+    /// <summary>
+    /// SSH remote attach targets (SureCourt, CC3 prod, …). Stored under LocalApplicationData.
+    /// </summary>
+    public List<Models.RemoteServerProfile> RemoteServers { get; set; } = new();
+
     // Views configuration
     public List<ViewState> Views { get; set; } = new();
 
